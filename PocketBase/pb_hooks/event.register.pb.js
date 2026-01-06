@@ -1,7 +1,8 @@
-/// <reference path="../pb_data/types.d.ts" />
+// <reference path="../pb_data/types.d.ts" />
 
 routerAdd(
     "POST", "/api/event/:eventId/register", (e) => {
+
         const requestBody = e.requestInfo()?.body || {};
         const eventId = e.requestInfo()?.pathParams?.eventId
 
@@ -16,11 +17,6 @@ routerAdd(
             type: "email",
             required: false,
             },
-            isHost: {
-            type: "bool",
-            required: false,
-            default: false,
-            },
         };
         
         const input = validateRequest(requestBody,requestSpec);
@@ -28,7 +24,7 @@ routerAdd(
         const registrantName = input.name;
         const registrantEmail = input.email
 
-        function createNewRegistrant(eventId, registrantName, registrantEmail = "", isHost = false) {
+        function createNewRegistrant(eventId, registrantName, registrantEmail = "") {
             let record = new Record(e.app.findCollectionByNameOrId("registrants"))
 
             const password = $security.randomString(24);
@@ -42,7 +38,6 @@ routerAdd(
             if(!isBlank(registrantEmail)) { 
                 record.set( "registrant_email", registrantEmail ) 
             };
-            record.set("is_host", isHost);
             
             try {
                 e.app.save(record);
@@ -60,15 +55,6 @@ routerAdd(
             }
         };
 
-        // Authentication check
-        const auth = e.auth;
-        if (!auth || !auth.id) {
-            throwApi(
-                401,
-                "Host invite requires authentication",
-            );
-        }
-
         // Event load
         let event;
         try {
@@ -82,46 +68,7 @@ routerAdd(
                     "Event not found",
                 { eventId: eventId },
             );
-        }        
-
-        // Access checks
-        let requestingAgent;
-        try {
-            requestingAgent = e.app.findFirstRecordByFilter(
-                "registrants",
-                "id = {:id} && event = {:eventId}",
-                {
-                id: auth.id,
-                eventId,
-                },
-            );
-            } catch (_) {
-            throwApi(
-                403,
-                "Not authorized for this event",
-            );
         }
-
-        if (!requestingAgent.getBool("is_host")) {
-            throwApi(
-                403,
-                "Host privileges required",
-            );
-        }
-
-        if (input.isHost) {
-            const ownerId = String( 
-                event.get(
-                    "owning_registrant",
-                )
-            );
-            if (ownerId && ownerId !== requestingAgent.id) {
-                throwApi(
-                403,
-                "Only the event owner can assign host privileges",
-                );
-            }
-        }        
 
         // Capacity check
         const maxAttendants = event.getInt("max_attendants")
@@ -135,8 +82,29 @@ routerAdd(
                 throwApi(409, "Number of invites/registrants has reached maximum attendants for the event")
             }
         }
-            
-        const newRegistrant = createNewRegistrant(eventId, registrantName, registrantEmail, input.isHost);
+        
+        // Registrant check
+        const auth = e.auth;
+        const registrant = e.app.countRecords(
+            "registrants",
+            "id = {:id} && event = {:eventId}",
+            {
+            id: auth.id,
+            eventId,
+            },
+        );
+        if ((auth || auth.id) && registrant > 0) {
+            throwApi(
+                401,
+                "Client is already registered for this event",
+            );
+        };
+
+        if (event.getBool("is_private")) {
+            throw new BadRequestError("Event is private and invite only")
+        };
+
+        const newRegistrant = createNewRegistrant(eventId, registrantName, registrantEmail);
 
         return e.json(
             200,
@@ -145,9 +113,8 @@ routerAdd(
                 registrantId: newRegistrant.recordId,
                 inviteId: newRegistrant.inviteId,
                 inviteCode: newRegistrant.inviteCode,
-            }
+                // inviteUrl: {env.baseUrl}/..
+            },
         );
-
-        // Placeholder: Send email if provided
     }
 );
