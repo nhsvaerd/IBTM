@@ -137,20 +137,21 @@ function validateRequest(body, spec, opts = {}) {
         out[field] = d.toISOString();
         break;
       }
-  }
-
-  if (errors.length > 0) {
-    if (mode === "return") {
-      return { ok: false, data: null, errors };
     }
 
-    throw new BadRequestError(
-      "Invalid request body",
-      { errors },
-    );
-  }
+    if (errors.length > 0) {
+      if (mode === "return") {
+        return { ok: false, data: null, errors };
+      }
 
-  return mode === "return"
+      throw new BadRequestError(
+        "Invalid request body",
+        { errors },
+      );
+    }
+
+    return mode === "return" 
     ? { ok: true, data: out, errors: [] }
     : out;
+  }
 }
