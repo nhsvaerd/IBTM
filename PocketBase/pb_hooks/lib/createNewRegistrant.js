@@ -1,31 +1,33 @@
-        function createNewRegistrant(eventId, registrantName, registrantEmail = "", isHost = false) {
-            let record = new Record(e.app.findCollectionByNameOrId("registrants"))
+/// <reference path="??/pb_data/types.d.ts" />
 
-            const password = $security.randomString(24);
-            const inviteId = $security.randomString(12);
-            const inviteCode = `${inviteId}.${password}`;
+function createNewRegistrant(eventId, registrantName, registrantEmail = "", isHost = false) {
+    let record = new Record(e.app.findCollectionByNameOrId("registrants"))
 
-            record.setPassword(password);
-            record.set("invite_id", inviteId);
-            record.set("event", eventId);
-            record.set("name", registrantName);
-            if(!isBlank(registrantEmail)) { 
-                record.set( "registrant_email", registrantEmail ) 
-            };
-            record.set("is_host", isHost);
-            
-            try {
-                e.app.save(record);
-            } catch (err) {
-                throwApi(
-                    500,
-                    "Unknown error"
-                );
-            }
+    const password = $security.randomString(24);
+    const inviteId = $security.randomString(12);
+    const inviteCode = `${inviteId}.${password}`;
 
-            return {
-                recordId: record.id,
-                inviteId: inviteId,
-                inviteCode: inviteCode
-            }
-        };
+    record.setPassword(password);
+    record.set("invite_id", inviteId);
+    record.set("event", eventId);
+    record.set("name", registrantName);
+    if(!isBlank(registrantEmail)) { 
+        record.set( "registrant_email", registrantEmail ) 
+    };
+    record.set("is_host", isHost);
+    
+    try {
+        e.app.save(record);
+    } catch (err) {
+        throwApi(
+            500,
+            "Unknown error"
+        );
+    }
+
+    return {
+        recordId: record.id,
+        inviteId: inviteId,
+        inviteCode: inviteCode
+    }
+};

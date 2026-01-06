@@ -8,7 +8,7 @@ onRecordUpdateRequest((e) => {
   if (Object.prototype.hasOwnProperty.call(body, "invite_id")) {
     throw new BadRequestError(
     "invite_id cannot be changed once created.",
-    { field: "invite_code" },
+    { field: "invite_id" },
         );
   };
 

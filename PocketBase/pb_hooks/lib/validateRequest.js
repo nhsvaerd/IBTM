@@ -118,21 +118,25 @@ function validateRequest(body, spec, opts = {}) {
 
       case "datetime": {
         const s = String(raw).trim();
+
+        const hasTimezone =
+          /[zZ]$/.test(s) || /[+\-]\d{2}:\d{2}$/.test(s);
+
+        if (!hasTimezone) {
+          addError(field, "Datetime must include timezone (Z or ±HH:MM)");
+          break;
+        }
+
         const d = new Date(s);
         if (Number.isNaN(d.getTime())) {
-            addError(field, "Invalid datetime");
-            break;
+          addError(field, "Invalid datetime");
+          break;
         }
-        out[field] = s; // keep string, PB parses later
-        break;
-      }
 
-      default: {
-        // "any" or unknown type: pass through
-        out[field] = raw;
+        // normalize
+        out[field] = d.toISOString();
         break;
       }
-    }
   }
 
   if (errors.length > 0) {
