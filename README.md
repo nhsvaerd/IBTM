@@ -1,5 +1,5 @@
 # IBTM — "I'll be there man"
-#### Or 'Invite-Based Togethernes Management', if you're not into the whole brevity thing
+### Or 'Invite-Based Togethernes Management', if you're not into the whole brevity thing
 
 This is a 'baby's first React app' learning project, with some aspirations of eventually being actually useful:
 
