@@ -1,5 +1,5 @@
 # IBTM — "I'll be there man"
-## Or, 'Invite-Based Togethernes Management', if you're not into the whole brevity thing
+**Or, 'Invite-Based Togethernes Management', if you're not into the whole brevity thing**
 
 This is a 'baby's first React app' learning project, with some aspirations of eventually being actually useful:
 
@@ -7,7 +7,6 @@ A self-hosted personal event, RSVP, and messageboard application built for low-f
 
 Guests do not create accounts, but authenticate per-event using invite codes:
 The goal is to enable simple access without registration, while retaining a modicum of access control.
----
 
 ## Core concepts
 
@@ -26,7 +25,6 @@ Events may be:
 - **Public:** Browsable and self-registerable
 - **Private:** Accessible only via invite code or existing authentication
 
----
 
 ### Registrants (event-scoped identities)
 
@@ -54,14 +52,14 @@ An invite code is a short-lived bearer secret used to authenticate a registrant.
 - A registrant can be issued a new invite code by rotating the password component
 
 Forwarding an invite code forwards access.
----
+
 
 ### Users
 
 - A user is an optional authenticated account intended to relate multiple registrants across events.
 - Not required for hosting or participation
 - Intended for future convenience and administration (v2+)
----
+
 
 ## Roles and privileges
 
@@ -81,7 +79,7 @@ Can:
 - Add/invite registrants to private events they are co-hosting
 - Increase event capacity
 - Revoke access
----
+
 
 ## Access model (v1)
 
@@ -128,8 +126,6 @@ Events may define:
 | Check in registrants          | ❌                     | ❌              | ❌       | ✅           |
 
 
----
-
 ## Public browsing
 
 Public events are exposed via a dedicated read-only view collection.
@@ -150,7 +146,6 @@ Custom endpoints (v1):
 - `POST /api/event/:eventId/invite-reissue` (Public. Require `registrant_email`)
 
 All other interactions rely on PocketBase’s standard API + rules.
----
 
 This project is designed for small personal deployments.
 Minimal friction is prioritized over strong security and identity guarantees.
