@@ -24,6 +24,7 @@ dist-ssr
 *.sw?
 PocketBase/pocketbase.exe
 PocketBase/pd_data/*
+PocketBase\pb_data\*
 
 # Junk archive
 Archive/*
