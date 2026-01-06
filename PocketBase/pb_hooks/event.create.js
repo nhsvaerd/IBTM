@@ -55,21 +55,37 @@ routerAdd(
                 eventId: record.id,
             }
         };
-
+        
         const newEvent = createNewEvent(eventTitle, startTime);
         try {
             const newOwner = createNewRegistrant(newEvent.eventId,ownerName,ownerEmail,true);
             const eventRecord = e.app.findRecordById("events", newOwner.recordId);
+
             eventRecord.set("owning_host", newOwner.recordId);
             e.app.save(eventRecord);
+
         } catch (err) {
-            let record = e.app.findRecordById("events", newEvent.eventId);
-            e.app.delete(record);
+            let eventFailed = e.app.findRecordById("events", newEvent.eventId);
+            e.app.delete(eventFailed);
+
+            let ownerFailed = e.app.findRecordById("events", newOwner.eventId);
+            e.app.delete(ownerFailed);
+
             throwApi(
                 500,
                 "Error creating event"
             );
-        }
+        } 
+        
+        return e.json(
+            200,
+            {
+                eventId: newEvent.eventId,
+                ownerId: newOwner.recordId,
+                inviteCode: newOwner.inviteCode,
+                //inviteURL:
+            }
+        ) 
 
         
         
