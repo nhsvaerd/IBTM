@@ -1,9 +1,9 @@
 # IBTM — "I'll be there man"
-**Or, 'Invite-Based Togethernes Management', if you're not into the whole brevity thing**
+#### Or 'Invite-Based Togethernes Management', if you're not into the whole brevity thing
 
 This is a 'baby's first React app' learning project, with some aspirations of eventually being actually useful:
 
-A self-hosted personal event, RSVP manager, and messageboard application built for low-friction guest participation.
+A self-hosted personal event, RSVP, and messageboard application built for low-friction guest participation.
 
 Guests do not create accounts, but authenticate per-event using invite codes:
 The goal is to enable simple access without registration, while retaining a modicum of access control.
@@ -27,22 +27,17 @@ Events may be:
 
 
 ### Registrants (event-scoped identities)
-
 A registrant represents a single participant within one specific event.
 
 - A registrant always belongs to exactly one event
 - Registrants are implemented as a PocketBase auth collection
 - Authentication uses:
-    - invite_id as primary identity
+    - `invite_id` as primary identity
     - a generated password
-
 - Registrants are not global users and do not persist across events
 
-There is no cross-event guest identity in v1.
----
 
 ### Invite codes
-
 An invite code is a short-lived bearer secret used to authenticate a registrant.
 
 - Format: `invite_id.password`
@@ -55,7 +50,6 @@ Forwarding an invite code forwards access.
 
 
 ### Users
-
 - A user is an optional authenticated account intended to relate multiple registrants across events.
 - Not required for hosting or participation
 - Intended for future convenience and administration (v2+)
@@ -64,7 +58,6 @@ Forwarding an invite code forwards access.
 ## Roles and privileges
 
 ### Owning host
-
 Each event has one owning host (registrant).
 
 Only the owning host can:
@@ -74,7 +67,6 @@ Only the owning host can:
 - Set read_until / write_until access windows
 
 ## Co-hosts
-
 Can:
 - Add/invite registrants to private events they are co-hosting
 - Increase event capacity
@@ -87,12 +79,10 @@ Can:
 - Uses PocketBase’s built-in auth tokens for the `registrants auth collection
 
 ### Access paths
-
 - First-time access: Invite link containing invite code
 - Returning access: Direct access to /event/{eventId} if already authenticated
 
 ### Time-based access
-
 Events may define:
 - `write_until`: After which registrants become read-only. Default value offset from `end_time`
 - `read_until`: (Optional) After which the event becomes inaccessible (archived)
@@ -127,14 +117,12 @@ Events may define:
 
 
 ## Public browsing
-
 Public events are exposed via a dedicated read-only view collection.
 - Only public-safe fields are exposed
 - Private events are not listed
 - Browsed with dedicated frontend page
 
 ## Architecture
-
 - Backend: PocketBase
 - Frontend: React SPA
 
@@ -151,13 +139,11 @@ This project is designed for small personal deployments.
 Minimal friction is prioritized over strong security and identity guarantees.
 
 ## Non-goals (v1)
-
 - Public user signup
 - Device/session dashboards
 - Advanced moderation tooling
 
-## Tentative roadmap (v2+)
-
+## Tentati
 - HTTP only Cookies and session abstraction
 - Session controls
 - Granulated response logging 
