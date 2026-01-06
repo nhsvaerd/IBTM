@@ -23,8 +23,7 @@ dist-ssr
 *.sln
 *.sw?
 PocketBase/pocketbase.exe
-PocketBase/pd_data/*
-PocketBase\pb_data\*
+PocketBase/pd_data
 
 # Junk archive
-Archive/*
+Archive
