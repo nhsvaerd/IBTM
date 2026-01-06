@@ -1,5 +1,3 @@
-/// <reference path="??/pb_data/types.d.ts" />
-
 function createNewRegistrant(eventId, registrantName, registrantEmail = "", isHost = false) {
     let record = new Record(e.app.findCollectionByNameOrId("registrants"))
 
