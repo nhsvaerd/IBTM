@@ -3,7 +3,7 @@
 
 This is a 'baby's first React app' learning project, with some aspirations of eventually being actually useful:
 
-A self-hosted personal event, RSVP, and messageboard application built for low-friction guest participation.
+A self-hosted personal event, RSVP manager, and messageboard application built for low-friction guest participation.
 
 Guests do not create accounts, but authenticate per-event using invite codes:
 The goal is to enable simple access without registration, while retaining a modicum of access control.
