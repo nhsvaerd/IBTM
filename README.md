@@ -27,14 +27,13 @@ Events may be:
 
 
 ### Registrants (event-scoped identities)
-A registrant represents a single participant within one specific event.
+Registrants are per-event identities: The same person across multiple events is represented by multiple registrant records (optionally linked to a single global user).
 
-- A registrant always belongs to exactly one event
 - Registrants are implemented as a PocketBase auth collection
 - Authentication uses:
     - `invite_id` as primary identity
     - a generated password
-- Registrants are not global users and do not persist across events
+- Registrants only belong to one event, are not global users, and do not persist across events
 
 
 ### Invite codes
