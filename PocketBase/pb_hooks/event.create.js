@@ -1,0 +1,77 @@
+/// <reference path="../pb_data/types.d.ts" />
+
+routerAdd(
+    "POST", "/api/event/create", (e) => {
+        const requestBody = e.requestInfo()?.body || {};
+
+        const requestSpec = {
+            ownerName: {
+            type: "string",
+            required: true,
+            minLength: 2,
+            maxLength: 200,
+            },
+            title: {
+            type: "string",
+            required: true,
+            minLength: 1,
+            maxLength: 200,
+            },       
+            startTime: {
+            type: "datetime",
+            required: true,
+            minLength: 1,
+            maxLength: 200,
+            },
+            ownerEmail: {
+            type: "email",
+            required: false,
+            },
+        }
+
+        const input = validateRequest(requestBody,requestSpec);
+
+        const ownerName = input.ownerName;
+        const eventTitle = input.title;
+        const startTime = input.startTime;
+        const ownerEmail = input.ownerEmail
+
+        function createNewEvent(eventTitle, startTime,) {
+            let record = new Record(e.app.findCollectionByNameOrId("events"))
+
+            record.set("title", eventTitle);
+            record.set("startTime", startTime);
+
+            try {
+                e.app.save(record);
+            } catch (err) {
+                throwApi(
+                    500,
+                    "Unknown error"
+                );
+            }
+
+            return {
+                eventId: record.id,
+            }
+        };
+
+        const newEvent = createNewEvent(eventTitle, startTime);
+        try {
+            const newOwner = createNewRegistrant(newEvent.eventId,ownerName,ownerEmail,true);
+            const eventRecord = e.app.findRecordById("events", newOwner.recordId);
+            eventRecord.set("owning_host", newOwner.recordId);
+            e.app.save(eventRecord);
+        } catch (err) {
+            let record = e.app.findRecordById("events", newEvent.eventId);
+            e.app.delete(record);
+            throwApi(
+                500,
+                "Error creating event"
+            );
+        }
+
+        
+        
+    }
+)
