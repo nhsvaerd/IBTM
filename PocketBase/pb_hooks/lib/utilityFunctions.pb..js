@@ -34,10 +34,6 @@ function throwApi(status, message, data = {}) {
   );
 };
 
-function badRequest(code, extra = {}) {
-  throw new BadRequestError(code, extra);
-};
-
 function requireString(value, field) {
   if (value === null || value === undefined) {
     throwApi(400, `Missing ${field}`, { field });
@@ -51,3 +47,26 @@ function requireString(value, field) {
   return s;
 };
 
+function startOfLocalDay(date) {
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+    0,
+    0,
+    0,
+    0,
+  );
+}
+
+function addDaysLocal(date, days) {
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate() + days,
+    0,
+    0,
+    0,
+    0,
+  );
+}

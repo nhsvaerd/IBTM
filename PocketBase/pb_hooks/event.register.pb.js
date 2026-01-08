@@ -1,120 +1,213 @@
 // <reference path="../pb_data/types.d.ts" />
 
 routerAdd(
-    "POST", "/api/event/:eventId/register", (e) => {
+  "POST",
+  "/api/event/:eventId/register",
+  (e) => {
+    const requestInfo = e.requestInfo?.() ?? {};
 
-        const requestBody = e.requestInfo()?.body || {};
-        const eventId = e.requestInfo()?.pathParams?.eventId
+    const requestBody = requestInfo.body ?? {};
 
-        const requestSpec = {
-            name: {
-            type: "string",
-            required: true,
-            minLength: 1,
-            maxLength: 200,
-            },
-            email: {
-            type: "email",
-            required: false,
-            },
-        };
-        
-        const input = validateRequest(requestBody,requestSpec);
+    const eventId =requestInfo.pathParams?.eventId;
 
-        const registrantName = input.name;
-        const registrantEmail = input.email
+    if (!eventId) {
+      throwApi(400, "Missing eventId",)
+    }
 
-        function createNewRegistrant(eventId, registrantName, registrantEmail = "") {
-            let record = new Record(e.app.findCollectionByNameOrId("registrants"))
+    const requestSpec = {
+      name: {
+        type: "string",
+        required: true,
+        minLength: 1,
+        maxLength: 200,
+      },
+      email: {
+        type: "email",
+        required: false,
+      },
+    };
 
-            const password = $security.randomString(24);
-            const inviteId = $security.randomString(12);
-            const inviteCode = `${inviteId}.${password}`;
+    const input = validateRequest(
+      requestBody,
+      requestSpec,
+    );
 
-            record.setPassword(password);
-            record.set("invite_id", inviteId);
-            record.set("event", eventId);
-            record.set("name", registrantName);
-            if(!isBlank(registrantEmail)) { 
-                record.set( "registrant_email", registrantEmail ) 
-            };
-            
-            try {
-                e.app.save(record);
-            } catch (err) {
-                throwApi(
-                    500,
-                    "Unknown error"
-                );
-            }
+    const registrantName = input.name;
 
-            return {
-                recordId: record.id,
-                inviteId: inviteId,
-                inviteCode: inviteCode
-            }
-        };
+    const registrantEmail = input.email ?? "";
 
-        // Event load
+    let responseBody;
+
+    e.app.runInTransaction(
+      (txApp) => {
         let event;
         try {
-            event = e.app.findRecordById(
-                "events", 
-                eventId,
-            );
-            } catch (_) {
-                throwApi(
-                    404, 
-                    "Event not found",
-                { eventId: eventId },
-            );
+          event = txApp.findRecordById(
+            "events",
+            eventId,
+          );
+        } catch (_) {
+          throwApi(
+            404,
+            "Event not found",
+            { eventId },
+          );
         }
 
-        // Capacity check
-        const maxAttendants = event.getInt("max_attendants")
-        if(maxAttendants > 0) {
-            let registeredCount = e.app.countRecords(
-                "registrants",
-                "event = {:eventId}",
-                { "eventId" : eventId },
+        if (event.getBool("is_private")) {
+          throwApi(
+            403,
+            "Event is private and invite only",
+            { eventId },
+          );
+        }
+
+        // Check duplicate auth token
+        const auth =
+          txApp.auth;
+
+        if (auth?.id) {
+            const existingRegistrant = txApp.countRecords(
+              "registrants",
+              "id = {:id} && event = {:eventId}",
+              {
+                id: auth.id,
+                eventId,
+              },
             );
-            if(registeredCount >= maxAttendants) {
-                throwApi(409, "Number of invites/registrants has reached maximum attendants for the event")
+
+            if (existingRegistrant > 0) {
+                throwApi(
+                  409,
+                  "Already registered for this event",
+                  { eventId },
+                );
             }
         }
         
-        // Registrant check
-        const auth = e.auth;
-        const registrant = e.app.countRecords(
+        // Check duplicate email
+        if (registrantEmail) {
+          const existingEmail = txApp.countRecords(
             "registrants",
-            "id = {:id} && event = {:eventId}",
+            "event = {:eventId} && email = {:email}",
             {
-            id: auth.id,
-            eventId,
-            },
-        );
-        if ((auth || auth.id) && registrant > 0) {
+              eventId,
+              registrantEmail,
+            }
+          );
+
+          if (existingEmail > 0) {
+              throwApi(
+                409,
+                "Provided email already registered for this event",
+              )
+          }
+        }
+
+        // Check capacity
+        const maxAttendants = event.getInt("max_attendants",);
+
+        if (maxAttendants > 0) {
+          const currentCount = txApp.countRecords(
+            "registrants",
+            "event = {:eventId}",
+            { eventId },
+          );
+
+          if (currentCount >= maxAttendants) {
             throwApi(
-                401,
-                "Client is already registered for this event",
+              409,
+              "Event is full",
+              {
+                eventId,
+                maxAttendants,
+              },
             );
-        };
+          }
+        }
 
-        if (event.getBool("is_private")) {
-            throw new BadRequestError("Event is private and invite only")
-        };
-
-        const newRegistrant = createNewRegistrant(eventId, registrantName, registrantEmail);
-
-        return e.json(
-            200,
-            {
-                eventId: eventId,
-                registrantId: newRegistrant.recordId,
-                inviteId: newRegistrant.inviteId,
-                inviteCode: newRegistrant.inviteCode,
-                // inviteUrl: {env.baseUrl}/..
-            },
+        const newRegistrant = createNewRegistrant(
+          txApp,
+          {
+            eventId,
+            registrantName,
+            registrantEmail,
+          },
         );
-    }
+
+        responseBody = {
+          "eventId": eventId,
+          "registrantId": newRegistrant.recordId,
+          "inviteId": newRegistrant.inviteId,
+          "inviteCode": newRegistrant.inviteCode,
+        };
+      },
+    );
+
+    return e.json(
+      200,
+      responseBody,
+    );
+  },
 );
+
+function createNewRegistrant(
+    app,
+    {
+      eventId,
+      registrantName,
+      registrantEmail,
+    },
+  ) 
+  {
+  const record =
+    new Record(
+      app.findCollectionByNameOrId("registrants",),
+    );
+
+  const password = $security.randomString(24);
+
+  const inviteId = $security.randomString(12);
+
+  const inviteCode = `${inviteId}.${password}`;
+
+  record.setPassword(password,);
+
+  record.set(
+    "invite_id",
+    inviteId,
+  );
+
+  record.set(
+    "event",
+    eventId,
+  );
+
+  record.set(
+    "name",
+    registrantName,
+  );
+
+  if (!isBlank(registrantEmail)) {
+    record.set(
+      "registrant_email",
+      registrantEmail,
+    );
+  }
+
+  try {
+    app.save(record);
+  } catch (err) {
+    // Optional addition: Detect unique constraint errors and return 409
+    throwApi(
+      500,
+      "Failed to create registrant",
+    );
+  }
+
+  return {
+    recordId: record.id,
+    inviteId,
+    inviteCode,
+  };
+}

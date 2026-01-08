@@ -142,8 +142,9 @@ Minimal friction is prioritized over strong security and identity guarantees.
 - Device/session dashboards
 - Advanced moderation tooling
 
-## Tentati
+## Tentative roadmap (v2)
 - HTTP only Cookies and session abstraction
 - Session controls
 - Granulated response logging 
 - Enhanced moderation and revocation controls
+- In app admin panel for non-dev self-hosters: Interaction with PB dashboard is abstracted away

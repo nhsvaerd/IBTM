@@ -1,8 +1,10 @@
-/// <reference path="../pb_data/types.d.ts" />
+// <reference path="../pb_data/types.d.ts" />
 
 routerAdd(
-    "POST", "/api/event/create", (e) => {
-        const requestBody = e.requestInfo()?.body || {};
+    "POST", "/api/event/create", 
+    (e) => {
+        const requestBody = 
+            e.requestInfo()?.body || {};
 
         const requestSpec = {
             ownerName: {
@@ -20,8 +22,6 @@ routerAdd(
             startTime: {
             type: "datetime",
             required: true,
-            minLength: 1,
-            maxLength: 200,
             },
             ownerEmail: {
             type: "email",
@@ -29,97 +29,146 @@ routerAdd(
             },
         }
 
-        const input = validateRequest(requestBody,requestSpec);
+        const input = 
+            validateRequest(
+                requestBody,
+                requestSpec
+            );
 
         const ownerName = input.ownerName;
+    
         const eventTitle = input.title;
+    
         const startTime = input.startTime;
-        const ownerEmail = input.ownerEmail
+    
+        const ownerEmail = input.ownerEmail; //Optional: Full email validation
 
-        function createNewRegistrant(eventId, registrantName, registrantEmail = "", isHost = false) {
-            let record = new Record(e.app.findCollectionByNameOrId("registrants"))
-
-            const password = $security.randomString(24);
-            const inviteId = $security.randomString(12);
-            const inviteCode = `${inviteId}.${password}`;
-
-            record.setPassword(password);
-            record.set("invite_id", inviteId);
-            record.set("event", eventId);
-            record.set("name", registrantName);
-            if(!isBlank(registrantEmail)) { 
-                record.set( "registrant_email", registrantEmail ) 
-            };
-            record.set("is_host", isHost);
-            
-            try {
-                e.app.save(record);
-            } catch (err) {
-                throwApi(
-                    500,
-                    "Unknown error"
-                );
-            }
-
-            return {
-                recordId: record.id,
-                inviteId: inviteId,
-                inviteCode: inviteCode
-            }
-        };        
-
-        function createNewEvent(eventTitle, startTime,) {
-            let record = new Record(e.app.findCollectionByNameOrId("events"))
-
-            record.set("title", eventTitle);
-            record.set("startTime", startTime);
-
-            try {
-                e.app.save(record);
-            } catch (err) {
-                throwApi(
-                    500,
-                    "Unknown error"
-                );
-            }
-
-            return {
-                eventId: record.id,
-            }
-        };
+        // Check valid startTime
+        let dayOffset = getAppSetting(e, "StartDate_Day_Offset");
+        dayOffset = isBlank(dayOffset) ? 1 : dayOffset;
         
-        const newEvent = createNewEvent(eventTitle, startTime);
-        try {
-            const newOwner = createNewRegistrant(newEvent.eventId,ownerName,ownerEmail,true);
-            const eventRecord = e.app.findRecordById("events", newOwner.recordId);
+        validateFutureDate(startTime,{dayOffset});
 
-            eventRecord.set("owning_host", newOwner.recordId);
-            e.app.save(eventRecord);
+        e.app.runInTransaction(
+            (txApp) => {
+                const newEventId = createNewEvent(
+                    txApp,
+                    {
+                        eventTitle,
+                        startTime
+                    }
+                ).eventId;
+                const newOwner = createNewHost(
+                txApp,
+                    {
+                        newEventId,
+                        ownerName,
+                        ownerEmail,
+                    }
+                );
+                
+                const newEventRecord = txApp.findRecordById("events",newEventId);
+                newEventRecord.set("owning_host", newOwner.recordId);
 
-        } catch (err) {
-            let eventFailed = e.app.findRecordById("events", newEvent.eventId);
-            e.app.delete(eventFailed);
+                responseBody = {
+                    "eventId": newEventId,
+                    "ownerId": newOwner.recordId,
+                    "inviteCode": newOwner.inviteCode,
+                }
+            }
+        );
 
-            let ownerFailed = e.app.findRecordById("events", newOwner.eventId);
-            e.app.delete(ownerFailed);
-
-            throwApi(
-                500,
-                "Error creating event"
-            );
-        } 
-        
         return e.json(
             200,
-            {
-                eventId: newEvent.eventId,
-                ownerId: newOwner.recordId,
-                inviteCode: newOwner.inviteCode,
-                //inviteURL:
-            }
-        ) 
-
-        
-        
+            responseBody,
+        );
     }
-)
+);
+
+
+function createNewHost(
+    app,
+        {
+            eventId,
+            hostName,
+            hostEmail,
+        },
+    ) 
+    {
+    const record =
+        new Record(
+            app.findCollectionByNameOrId(
+                "registrants",
+            ),
+        );
+
+    const password = $security.randomString(24);
+
+    const inviteId = $security.randomString(12);
+
+    const inviteCode = `${inviteId}.${password}`;
+
+    record.setPassword(password,);
+
+    record.set("invite_id", inviteId,);
+
+    record.set("event", eventId,);
+
+    record.set("name", hostName,);
+    
+    record.set("is_host", true,);
+    
+    if (!isBlank(hostEmail)) {
+        record.set(
+            "registrant_email",
+            registrantEmail,
+        );
+    }
+
+    try {
+        app.save(record);
+    } catch (err) {
+        // Optional addition: Detect unique constraint errors and return 409
+        throwApi(
+            500,
+            "Failed to create registrant",
+        );
+    }
+
+    return {
+        recordId: record.id,
+        inviteId,
+        inviteCode,
+    };
+};
+
+function createNewEvent(
+    app,
+    {
+        eventTitle, 
+        startTime,
+    }
+) 
+{
+    const record = 
+    new Record(
+        app.findCollectionByNameOrId(
+            "events")
+    )
+
+    record.set("title", eventTitle);
+    record.set("start_time", startTime);
+
+    try {
+        e.app.save(record);
+    } catch (err) {
+        throwApi(
+            500,
+            "Unknown error"
+        );
+    }
+
+    return {
+        eventId: record.id,
+    }
+};
