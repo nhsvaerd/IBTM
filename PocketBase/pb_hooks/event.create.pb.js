@@ -3,8 +3,11 @@
 routerAdd(
     "POST", "/api/event/create", 
     (e) => {
-        const requestBody = 
-            e.requestInfo()?.body || {};
+        const requestInfo =
+        e.requestInfo?.() ?? {};
+
+        const requestBody =
+        requestInfo.body ?? {};
 
         const requestSpec = {
             ownerName: {
@@ -29,8 +32,7 @@ routerAdd(
             },
         }
 
-        const input = 
-            validateRequest(
+        const input = validateRequest(
                 requestBody,
                 requestSpec
             );
@@ -39,39 +41,51 @@ routerAdd(
     
         const eventTitle = input.title;
     
-        const startTime = input.startTime;
+        const startTimeInput = input.startTime;
     
         const ownerEmail = input.ownerEmail; //Optional: Full email validation
 
         // Check valid startTime
-        let dayOffset = getAppSetting(e, "StartDate_Day_Offset");
-        dayOffset = isBlank(dayOffset) ? 1 : dayOffset;
+        const dayOffset = getAppSettingOrDefault(e.app, "StartDateDayOffset", 1,);
         
-        validateFutureDate(startTime,{dayOffset});
+        const startTime = validateFutureDate(startTimeInput,{dayOffset});
+
+        // Set writeUntil
+        const writeUntilOffset = getAppSettingOrDefault(e.app, "WriteUntilDayOffset", 1,);
+
+        const writeUntil = addDaysLocal(startTime, writeUntilOffset,);
+        
+        let responseBody;
+
+
 
         e.app.runInTransaction(
             (txApp) => {
-                const newEventId = createNewEvent(
+                const newEvent = createNewEvent(
                     txApp,
                     {
                         eventTitle,
-                        startTime
+                        startTime,
+                        writeUntil,
                     }
-                ).eventId;
+                );
                 const newOwner = createNewHost(
                 txApp,
                     {
-                        newEventId,
-                        ownerName,
-                        ownerEmail,
+                        eventId: newEvent.eventId,
+                        hostName: ownerName,
+                        hostEmail: ownerEmail,
                     }
                 );
                 
-                const newEventRecord = txApp.findRecordById("events",newEventId);
+                const newEventRecord = txApp.findRecordById("events",newEvent.eventId);
+
                 newEventRecord.set("owning_host", newOwner.recordId);
 
+                txApp.save(newEventRecord);
+
                 responseBody = {
-                    "eventId": newEventId,
+                    "eventId": newEvent.eventId,
                     "ownerId": newOwner.recordId,
                     "inviteCode": newOwner.inviteCode,
                 }
@@ -84,7 +98,6 @@ routerAdd(
         );
     }
 );
-
 
 function createNewHost(
     app,
@@ -117,11 +130,11 @@ function createNewHost(
     record.set("name", hostName,);
     
     record.set("is_host", true,);
-    
+
     if (!isBlank(hostEmail)) {
         record.set(
             "registrant_email",
-            registrantEmail,
+            hostEmail,
         );
     }
 
@@ -147,6 +160,7 @@ function createNewEvent(
     {
         eventTitle, 
         startTime,
+        writeUntil,
     }
 ) 
 {
@@ -158,9 +172,10 @@ function createNewEvent(
 
     record.set("title", eventTitle);
     record.set("start_time", startTime);
+    record.set("write_until", writeUntil)
 
     try {
-        e.app.save(record);
+        app.save(record);
     } catch (err) {
         throwApi(
             500,

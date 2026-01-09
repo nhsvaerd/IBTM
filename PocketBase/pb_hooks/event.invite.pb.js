@@ -54,8 +54,7 @@ routerAdd(
     !!input.isHost;
 
     // Authentication check
-    const auth =
-    e.auth;
+    const auth = e.auth;
 
     if (!auth?.id) {
         throwApi(
@@ -159,8 +158,8 @@ routerAdd(
                 "registrants",
                 "event = {:eventId} && email = {:email}",
                 {
-                    eventId,
-                    registrantEmail,
+                    eventId: eventId,
+                    email: registrantEmail,
                 }
             );
 

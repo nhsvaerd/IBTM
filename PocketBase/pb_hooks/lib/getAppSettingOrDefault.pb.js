@@ -109,4 +109,12 @@ function getAppSetting(
         },
       );
   }
-}
+};
+
+function getAppSettingOrDefault(app, key, fallback) {
+  try {
+    return getAppSetting(app, key);
+  } catch (_) {
+    return fallback;
+  }
+};

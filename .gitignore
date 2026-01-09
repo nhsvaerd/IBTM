@@ -22,8 +22,12 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# PocketBase
 PocketBase/pocketbase.exe
-PocketBase/pd_data
+PocketBase/pb_data/*
 
 # Junk archive
 Archive
+PocketBase/pb_data/auxiliary.db
+PocketBase/pb_data/data.db

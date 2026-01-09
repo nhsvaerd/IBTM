@@ -63,8 +63,7 @@ routerAdd(
         }
 
         // Check duplicate auth token
-        const auth =
-          txApp.auth;
+        const auth = e.auth;
 
         if (auth?.id) {
             const existingRegistrant = txApp.countRecords(
@@ -91,8 +90,8 @@ routerAdd(
             "registrants",
             "event = {:eventId} && email = {:email}",
             {
-              eventId,
-              registrantEmail,
+              eventId: eventId,
+              email: registrantEmail,
             }
           );
 
