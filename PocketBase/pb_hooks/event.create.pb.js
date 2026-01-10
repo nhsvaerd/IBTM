@@ -171,8 +171,8 @@ function createNewEvent(
     )
 
     record.set("title", eventTitle);
-    record.set("start_time", startTime);
-    record.set("write_until", writeUntil)
+    record.set("start_time", startTime.toISOString());
+    record.set("write_until", writeUntil.toISOString())
 
     try {
         app.save(record);

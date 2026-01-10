@@ -138,7 +138,8 @@ function validateRequest(body, spec, opts = {}) {
       return { ok: false, data: null, errors };
     }
 
-    throw new BadRequestError(
+    throwApi(
+      400,
       "Invalid request body",
       { errors },
     );

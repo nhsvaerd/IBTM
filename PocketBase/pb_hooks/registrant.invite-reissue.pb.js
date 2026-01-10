@@ -21,12 +21,11 @@ routerAdd(
         email: {
             type: "email",
             required: true,
-            minLength: 6,
-            maxLength: 250,
         },
     };
 
-    const allowEndpoint = getAppSetting("AllowUnauthenticatedReissue");
+    const allowEndpoint = getAppSettingOrDefault(e.app, "AllowUnauthenticatedReissue", false,);
+
     if (!allowEndpoint) {
         throwApi(
             403,
@@ -51,7 +50,7 @@ routerAdd(
 
     let responseBody;
     
-    e.app.runInTransaction(
+    const transactionResult = e.app.runInTransaction(
         (txApp) => {
             // Event load
             let event;
@@ -67,14 +66,6 @@ routerAdd(
                 { eventId },
                 );
             };
-
-            if (event.getBool("is_private")) {
-                throwApi(
-                    403,
-                    "Event is private and invite only",
-                    { eventId },
-                );
-            }
 
             // Check duplicate auth token
             const auth = e.auth;
@@ -101,7 +92,7 @@ routerAdd(
             // Load registrant
             const record = txApp.findFirstRecordByFilter(
                 "registrants",
-                "event = {:eventId} && name = {:name} && email = {:email}",
+                "event = {:eventId} && name = {:name} && registrant_email = {:email}",
                 {
                     eventId: eventId,
                     name: registrantName,
@@ -109,7 +100,7 @@ routerAdd(
                 }
             );
 
-            if (!erecord) {
+            if (!record) {
                 throwApi(
                     404,
                     "Registrant not found",
@@ -120,15 +111,15 @@ routerAdd(
 
             const newInviteCode = `${record.inviteId}.${password}`;
 
-            record.setPassword("password");
+            record.setPassword(password);
 
             txApp.save(record);
 
             return {newInviteCode,};
         }
     );
-
-    responseBody = {newInviteCode,}; //Replace with sending email before release
+    
+    return e.json(200, transactionResult) //Replace with sending email before release
 
     },
 );

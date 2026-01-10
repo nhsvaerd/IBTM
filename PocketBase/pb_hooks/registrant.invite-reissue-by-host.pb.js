@@ -13,12 +13,6 @@ routerAdd(
     const eventId = requestInfo.pathParams?.eventId;
 
     const requestSpec = {
-        eventId: {
-            type: "string",
-            required: true,
-            minLength: 8,
-            maxLength: 16,
-        },
         registrantId: {
             type: "string",
             required: true,
@@ -41,7 +35,7 @@ routerAdd(
 
     let responseBody;
     
-    const newInviteCode = 
+    const transactionResult = 
       e.app.runInTransaction(
       (txApp) => {
         // Event load
@@ -59,9 +53,13 @@ routerAdd(
             );
         }
 
-        // Registrant check
+        // Auth check
         const auth = e.auth;
-
+        if (!auth?.id) {
+          throwApi(401, "Authentication required");
+        };
+          
+        // Registrant check
         let requestingAgent;
         try {
           requestingAgent = txApp.findFirstRecordByFilter(
@@ -80,6 +78,18 @@ routerAdd(
             );
         }
 
+        // Registrant check
+        const record = 
+          txApp.findRecordById("registrants", input.registrantId,);
+        
+          if (!record.get("event") === eventId) {
+            throwApi(
+              403, 
+              "Provided registrant is not registered for this event"
+            )
+          }
+
+        // IsHost Check
         if (!requestingAgent.getBool("is_host")) {
             throwApi(
                 403,
@@ -88,22 +98,20 @@ routerAdd(
             );
         }
 
-        const record = txApp.findRecordById("registrants", input.registrantId,);
-
         const password = $security.randomString(24);
 
         const inviteId = record.getString("invite_id");
 
         const newInviteCode = `${inviteId}.${password}`;
 
-        record.setPassword("password");
+        record.setPassword(password);
 
         txApp.save(record);
 
         return {newInviteCode,};
       }
-    ).newInviteCode
+    );
 
-    responseBody = {newInviteCode,}; //Replace with sending email before release
+    return e.json (200, transactionResult); //Replace with sending email before release
   },
 );

@@ -156,7 +156,7 @@ routerAdd(
             const existingEmail =
             txApp.countRecords(
                 "registrants",
-                "event = {:eventId} && email = {:email}",
+                "event = {:eventId} && registrant_email = {:email}",
                 {
                     eventId: eventId,
                     email: registrantEmail,
