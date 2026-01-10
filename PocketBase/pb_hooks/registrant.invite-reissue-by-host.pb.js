@@ -78,16 +78,16 @@ routerAdd(
             );
         }
 
-        // Registrant check
+        // Registrant event check
         const record = 
           txApp.findRecordById("registrants", input.registrantId,);
         
-          if (!record.get("event") === eventId) {
-            throwApi(
-              403, 
-              "Provided registrant is not registered for this event"
-            )
-          }
+        if (String(record.get("event")) !== String(eventId)) {
+          throwApi(
+            403, 
+            "Provided registrant is not registered for this event",
+          );
+        }
 
         // IsHost Check
         if (!requestingAgent.getBool("is_host")) {

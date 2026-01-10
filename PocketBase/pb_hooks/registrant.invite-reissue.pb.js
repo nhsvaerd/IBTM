@@ -107,9 +107,11 @@ routerAdd(
                 )
             };
 
+            const inviteId = record.getString("invite_id");
+
             const password = $security.randomString(24);
 
-            const newInviteCode = `${record.inviteId}.${password}`;
+            const newInviteCode = `${inviteId}.${password}`;
 
             record.setPassword(password);
 

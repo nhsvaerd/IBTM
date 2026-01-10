@@ -214,7 +214,7 @@
             "CREATE UNIQUE INDEX `idx_tokenKey_1xkldq5u5v` ON `registrants` (`tokenKey`)",
             "CREATE UNIQUE INDEX `idx_email_1xkldq5u5v` ON `registrants` (`email`) WHERE `email` != ''",
             "CREATE UNIQUE INDEX `idx_aaHz7Xltda` ON `registrants` (`invite_id`)",
-            "CREATE UNIQUE INDEX `idx_vKt2xsbkhT` ON `registrants` (\n  `registrant_email`,\n  `event`\n) WHERE 'registrant_email' != '' ",
+            "CREATE UNIQUE INDEX `idx_vKt2xsbkhT` ON `registrants` (\n  `registrant_email`,\n  `event`\n) WHERE registrant_email != '' ",
             "CREATE INDEX `idx_WqZCuRRHao` ON `registrants` (`event`)",
             "CREATE INDEX `idx_4FminYCPu8` ON `registrants` (`user`)"
         ],
@@ -531,15 +531,14 @@
                 "maxSelect": 1,
                 "name": "type",
                 "presentable": false,
-                "required": false,
+                "required": true,
                 "system": false,
                 "type": "select",
                 "values": [
                     "integer",
                     "string",
                     "json",
-                    "boolean",
-                    "enum"
+                    "boolean"
                 ]
             },
             {
@@ -552,7 +551,7 @@
                 "pattern": "",
                 "presentable": false,
                 "primaryKey": false,
-                "required": false,
+                "required": true,
                 "system": false,
                 "type": "text"
             }
@@ -948,112 +947,6 @@
         "system": false
     },
     {
-        "id": "pbc_1125843985",
-        "listRule": null,
-        "viewRule": null,
-        "createRule": null,
-        "updateRule": null,
-        "deleteRule": null,
-        "name": "posts",
-        "type": "base",
-        "fields": [
-            {
-                "autogeneratePattern": "[a-z0-9]{15}",
-                "hidden": false,
-                "id": "text3208210256",
-                "max": 15,
-                "min": 15,
-                "name": "id",
-                "pattern": "^[a-z0-9]+$",
-                "presentable": false,
-                "primaryKey": true,
-                "required": true,
-                "system": true,
-                "type": "text"
-            },
-            {
-                "hidden": false,
-                "id": "bool3268062305",
-                "name": "edited",
-                "presentable": false,
-                "required": false,
-                "system": false,
-                "type": "bool"
-            },
-            {
-                "cascadeDelete": false,
-                "collectionId": "pbc_4041782348",
-                "hidden": false,
-                "id": "relation1001261735",
-                "maxSelect": 1,
-                "minSelect": 0,
-                "name": "event",
-                "presentable": false,
-                "required": true,
-                "system": false,
-                "type": "relation"
-            },
-            {
-                "autogeneratePattern": "",
-                "hidden": false,
-                "id": "text3065852031",
-                "max": 2500,
-                "min": 1,
-                "name": "message",
-                "pattern": "",
-                "presentable": false,
-                "primaryKey": false,
-                "required": true,
-                "system": false,
-                "type": "text"
-            },
-            {
-                "cascadeDelete": false,
-                "collectionId": "pbc_42490191812",
-                "hidden": false,
-                "id": "relation1712544448",
-                "maxSelect": 1,
-                "minSelect": 0,
-                "name": "registrant",
-                "presentable": false,
-                "required": false,
-                "system": false,
-                "type": "relation"
-            },
-            {
-                "hidden": false,
-                "id": "bool24025353",
-                "name": "is_flagged",
-                "presentable": false,
-                "required": false,
-                "system": false,
-                "type": "bool"
-            },
-            {
-                "hidden": false,
-                "id": "autodate2990389176",
-                "name": "created",
-                "onCreate": true,
-                "onUpdate": false,
-                "presentable": false,
-                "system": false,
-                "type": "autodate"
-            },
-            {
-                "hidden": false,
-                "id": "autodate3332085495",
-                "name": "updated",
-                "onCreate": true,
-                "onUpdate": true,
-                "presentable": false,
-                "system": false,
-                "type": "autodate"
-            }
-        ],
-        "indexes": [],
-        "system": false
-    },
-    {
         "id": "pbc_1433696524",
         "listRule": null,
         "viewRule": null,
@@ -1164,6 +1057,112 @@
             "CREATE UNIQUE INDEX `idx_pistJ3gOmD` ON `responses` (`registrant`)",
             "CREATE INDEX `idx_zPe7w8ky8T` ON `responses` (`event`)"
         ],
+        "system": false
+    },
+    {
+        "id": "pbc_1125843985",
+        "listRule": null,
+        "viewRule": null,
+        "createRule": null,
+        "updateRule": null,
+        "deleteRule": null,
+        "name": "posts",
+        "type": "base",
+        "fields": [
+            {
+                "autogeneratePattern": "[a-z0-9]{15}",
+                "hidden": false,
+                "id": "text3208210256",
+                "max": 15,
+                "min": 15,
+                "name": "id",
+                "pattern": "^[a-z0-9]+$",
+                "presentable": false,
+                "primaryKey": true,
+                "required": true,
+                "system": true,
+                "type": "text"
+            },
+            {
+                "hidden": false,
+                "id": "bool3268062305",
+                "name": "edited",
+                "presentable": false,
+                "required": false,
+                "system": false,
+                "type": "bool"
+            },
+            {
+                "cascadeDelete": false,
+                "collectionId": "pbc_4041782348",
+                "hidden": false,
+                "id": "relation1001261735",
+                "maxSelect": 1,
+                "minSelect": 0,
+                "name": "event",
+                "presentable": false,
+                "required": true,
+                "system": false,
+                "type": "relation"
+            },
+            {
+                "autogeneratePattern": "",
+                "hidden": false,
+                "id": "text3065852031",
+                "max": 2500,
+                "min": 1,
+                "name": "message",
+                "pattern": "",
+                "presentable": false,
+                "primaryKey": false,
+                "required": true,
+                "system": false,
+                "type": "text"
+            },
+            {
+                "cascadeDelete": false,
+                "collectionId": "pbc_42490191812",
+                "hidden": false,
+                "id": "relation1712544448",
+                "maxSelect": 1,
+                "minSelect": 0,
+                "name": "registrant",
+                "presentable": false,
+                "required": false,
+                "system": false,
+                "type": "relation"
+            },
+            {
+                "hidden": false,
+                "id": "bool24025353",
+                "name": "is_flagged",
+                "presentable": false,
+                "required": false,
+                "system": false,
+                "type": "bool"
+            },
+            {
+                "hidden": false,
+                "id": "autodate2990389176",
+                "name": "created",
+                "onCreate": true,
+                "onUpdate": false,
+                "presentable": false,
+                "system": false,
+                "type": "autodate"
+            },
+            {
+                "hidden": false,
+                "id": "autodate3332085495",
+                "name": "updated",
+                "onCreate": true,
+                "onUpdate": true,
+                "presentable": false,
+                "system": false,
+                "type": "autodate"
+            }
+        ],
+        "indexes": [],
         "system": false
     }
 ]

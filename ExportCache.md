@@ -1,9 +1,3 @@
-# Project Export
-
-## Project Statistics
-
-- Total files: 12
-
 ## Folder Structure
 
 ```
@@ -202,8 +196,8 @@ function createNewEvent(
     )
 
     record.set("title", eventTitle);
-    record.set("start_time", startTime);
-    record.set("write_until", writeUntil)
+    record.set("start_time", startTime.toISOString());
+    record.set("write_until", writeUntil.toISOString())
 
     try {
         app.save(record);
@@ -381,7 +375,7 @@ routerAdd(
             const existingEmail =
             txApp.countRecords(
                 "registrants",
-                "event = {:eventId} && email = {:email}",
+                "event = {:eventId} && registrant_email = {:email}",
                 {
                     eventId: eventId,
                     email: registrantEmail,
@@ -591,7 +585,7 @@ routerAdd(
         if (registrantEmail) {
           const existingEmail = txApp.countRecords(
             "registrants",
-            "event = {:eventId} && email = {:email}",
+            "event = {:eventId} && registrant_email = {:email}",
             {
               eventId: eventId,
               email: registrantEmail,
@@ -1138,7 +1132,8 @@ function validateRequest(body, spec, opts = {}) {
       return { ok: false, data: null, errors };
     }
 
-    throw new BadRequestError(
+    throwApi(
+      400,
       "Invalid request body",
       { errors },
     );
@@ -2343,12 +2338,6 @@ routerAdd(
     const eventId = requestInfo.pathParams?.eventId;
 
     const requestSpec = {
-        eventId: {
-            type: "string",
-            required: true,
-            minLength: 8,
-            maxLength: 16,
-        },
         registrantId: {
             type: "string",
             required: true,
@@ -2371,7 +2360,7 @@ routerAdd(
 
     let responseBody;
     
-    const newInviteCode = 
+    const transactionResult = 
       e.app.runInTransaction(
       (txApp) => {
         // Event load
@@ -2389,9 +2378,13 @@ routerAdd(
             );
         }
 
-        // Registrant check
+        // Auth check
         const auth = e.auth;
-
+        if (!auth?.id) {
+          throwApi(401, "Authentication required");
+        };
+          
+        // Registrant check
         let requestingAgent;
         try {
           requestingAgent = txApp.findFirstRecordByFilter(
@@ -2410,6 +2403,18 @@ routerAdd(
             );
         }
 
+        // Registrant check
+        const record = 
+          txApp.findRecordById("registrants", input.registrantId,);
+        
+          if (!record.get("event") === eventId) {
+            throwApi(
+              403, 
+              "Provided registrant is not registered for this event"
+            )
+          }
+
+        // IsHost Check
         if (!requestingAgent.getBool("is_host")) {
             throwApi(
                 403,
@@ -2418,23 +2423,21 @@ routerAdd(
             );
         }
 
-        const record = txApp.findRecordById("registrants", input.registrantId,);
-
         const password = $security.randomString(24);
 
         const inviteId = record.getString("invite_id");
 
         const newInviteCode = `${inviteId}.${password}`;
 
-        record.setPassword("password");
+        record.setPassword(password);
 
         txApp.save(record);
 
         return {newInviteCode,};
       }
-    ).newInviteCode
+    );
 
-    responseBody = {newInviteCode,}; //Replace with sending email before release
+    return e.json (200, transactionResult); //Replace with sending email before release
   },
 );
 
@@ -2466,12 +2469,11 @@ routerAdd(
         email: {
             type: "email",
             required: true,
-            minLength: 6,
-            maxLength: 250,
         },
     };
 
-    const allowEndpoint = getAppSetting("AllowUnauthenticatedReissue");
+    const allowEndpoint = getAppSettingOrDefault(e.app, "AllowUnauthenticatedReissue", false,);
+
     if (!allowEndpoint) {
         throwApi(
             403,
@@ -2496,7 +2498,7 @@ routerAdd(
 
     let responseBody;
     
-    e.app.runInTransaction(
+    const transactionResult = e.app.runInTransaction(
         (txApp) => {
             // Event load
             let event;
@@ -2512,14 +2514,6 @@ routerAdd(
                 { eventId },
                 );
             };
-
-            if (event.getBool("is_private")) {
-                throwApi(
-                    403,
-                    "Event is private and invite only",
-                    { eventId },
-                );
-            }
 
             // Check duplicate auth token
             const auth = e.auth;
@@ -2546,7 +2540,7 @@ routerAdd(
             // Load registrant
             const record = txApp.findFirstRecordByFilter(
                 "registrants",
-                "event = {:eventId} && name = {:name} && email = {:email}",
+                "event = {:eventId} && name = {:name} && registrant_email = {:email}",
                 {
                     eventId: eventId,
                     name: registrantName,
@@ -2554,7 +2548,7 @@ routerAdd(
                 }
             );
 
-            if (!erecord) {
+            if (!record) {
                 throwApi(
                     404,
                     "Registrant not found",
@@ -2565,15 +2559,15 @@ routerAdd(
 
             const newInviteCode = `${record.inviteId}.${password}`;
 
-            record.setPassword("password");
+            record.setPassword(password);
 
             txApp.save(record);
 
             return {newInviteCode,};
         }
     );
-
-    responseBody = {newInviteCode,}; //Replace with sending email before release
+    
+    return e.json(200, transactionResult) //Replace with sending email before release
 
     },
 );
