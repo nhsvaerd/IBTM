@@ -1,7 +1,4 @@
-function getAppSetting(
-  app,
-  key,
-) {
+function getAppSetting(app, key,) {
   let record;
 
   try {

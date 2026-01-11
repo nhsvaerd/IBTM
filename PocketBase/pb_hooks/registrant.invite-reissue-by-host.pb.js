@@ -4,36 +4,20 @@ routerAdd(
   "POST",
   "/api/event/:eventId/invite-reissue-by-host",
   (e) => {
-    const requestInfo =
-      e.requestInfo?.() ?? {};
+    const requestInfo = e.requestInfo?.() ?? {};
 
-    const requestBody =
-      requestInfo.body ?? {};
+    const requestBody = requestInfo.body ?? {};
 
-    const eventId = requestInfo.pathParams?.eventId;
+    const eventId = requirePathParam(requestInfo, "eventId");
 
-    const requestSpec = {
-        registrantId: {
-            type: "string",
-            required: true,
-            minLength: 8,
-            maxLength: 16,
-        },
-    };
+    const inviteReissueByHostSchema =
+    z.object (
+      {
+        registrantId: schemaFields.registrant.id(),
+      }
+    ).strict();
 
-    if (!eventId) {
-      throwApi(
-          400,
-          "Missing eventId",
-      );
-    };
-
-    const input = validateRequest(
-        requestBody,
-        requestSpec
-    );
-
-    let responseBody;
+    const input = parseOrThrowApi(inviteReissueByHostSchema, requestBody,);
     
     const transactionResult = 
       e.app.runInTransaction(
@@ -112,6 +96,6 @@ routerAdd(
       }
     );
 
-    return e.json (200, transactionResult); //Replace with sending email before release
+    return e.json (200, transactionResult); //Replace with sending email
   },
 );

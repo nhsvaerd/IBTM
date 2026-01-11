@@ -4,51 +4,33 @@ routerAdd(
   "POST",
   "/api/event/:eventId/invite-reissue",
   (e) => {
-    const requestInfo =
-      e.requestInfo?.() ?? {};
-
-    const requestBody = requestInfo.body ?? {};
-
-    const eventId = requestInfo.pathParams?.eventId;
-
-    const requestSpec = {
-        name: {
-            type: "string",
-            required: true,
-            minLength: 1,
-            maxLength: 250,
-        },
-        email: {
-            type: "email",
-            required: true,
-        },
-    };
-
     const allowEndpoint = getAppSettingOrDefault(e.app, "AllowUnauthenticatedReissue", false,);
 
     if (!allowEndpoint) {
         throwApi(
             403,
-            "New invite code must be aquired through an event host"
+            "New invite code must be aquired from event host"
         )
     };
 
-    if (!eventId) {  // Option: Replace with general path parameter validator 
-      throwApi(
-        400,
-        "Missing eventId",
-      );
-    };
+    const requestInfo = e.requestInfo?.() ?? {};
 
-    const input = validateRequest(
-        requestBody,
-        requestSpec
-    );
+    const requestBody = requestInfo.body ?? {};
+
+    const eventId = requirePathParam(requestInfo, "eventId");
+
+    const inviteReissueSchema =
+    z.object (
+        {
+            name: schemaFields.registrant.name(),
+            email: schemaFields.registrant.email(),
+        }
+    ).strict();
+
+    const input = parseOrThrowApi(inviteReissueSchema, requestBody,);
 
     const registrantName = input.name;
     const registrantEmail = input.email;
-
-    let responseBody;
     
     const transactionResult = e.app.runInTransaction(
         (txApp) => {

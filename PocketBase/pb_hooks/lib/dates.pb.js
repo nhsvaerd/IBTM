@@ -1,3 +1,27 @@
+function startOfLocalDay(date) {
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+    0,
+    0,
+    0,
+    0,
+  );
+};
+
+function addDaysLocal(date, days) {
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate() + days,
+    0,
+    0,
+    0,
+    0,
+  );
+};
+
 function validateFutureDate(
   dateTimeIso,
   {
@@ -69,4 +93,4 @@ function validateFutureDate(
   }
 
   return parsed;
-}
+};

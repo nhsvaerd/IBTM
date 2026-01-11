@@ -4,64 +4,36 @@ routerAdd(
   "POST",
   "/api/event/:eventId/invite",
   (e) => {
-    const requestInfo =
-      e.requestInfo?.() ?? {};
+    const requestInfo = e.requestInfo?.() ?? {};
 
-    const requestBody =
-      requestInfo.body ?? {};
+    const requestBody = requestInfo.body ?? {};
 
-    const eventId =
-      requestInfo.pathParams?.eventId;
+    const eventId = requirePathParam(requestInfo, "eventId");
 
-    if (!eventId) {
+    const auth = e.auth;
+    if (!auth?.id) {
       throwApi(
-        400,
-        "Missing eventId",
+        401,
+        "Invite creation requires authentication",
       );
-    }
-
-    const requestSpec = {
-      name: {
-        type: "string",
-        required: true,
-        minLength: 1,
-        maxLength: 200,
-      },
-      email: {
-        type: "email",
-        required: false,
-      },
-      isHost: {
-        type: "bool",
-        required: false,
-        default: false,
-      },
     };
 
-    const input =
-    validateRequest(
-        requestBody,
-        requestSpec,
-    );
+    const eventInviteSchema =
+    z.object(
+      {
+        name: schemaFields.registrant.name(),
+        email: schemaFields.registrant.email().optional(),
+        isHost: schemaFields.registrant.isHost().optional(),
+      }
+    ).strict();
 
-    const registrantName =
-    input.name;
+    const input = parseOrThrowApi(eventInviteSchema, requestBody,);
 
-    const registrantEmail =
-    input.email ?? "";
+    const registrantName = input.name;
 
-    const invitedAsHost =
-    !!input.isHost;
+    const registrantEmail = input.email ?? "";
 
-    // Authentication check
-    const auth = e.auth;
-
-    if (!auth?.id) {
-        throwApi(
-        401,
-        "Host invite requires authentication",
-        );
-    }
+    const invitedAsHost = !!input.isHost;
 
     let responseBody;
 
@@ -127,7 +99,7 @@ routerAdd(
           }
         }
 
-        // Capacity check (transaction-safe)
+        // Capacity check
         const maxAttendants =
             event.getInt("max_attendants",);
 
@@ -214,33 +186,17 @@ function createNewRegistrant(
       ),
     );
 
-  const password =
-    $security.randomString(24);
+  const credentials = createInviteCredentials();
 
-  const inviteId =
-    $security.randomString(12);
+  const inviteCode = credentials.inviteCode;
 
-  const inviteCode =
-    `${inviteId}.${password}`;
+  record.setPassword(credentials.password,);
 
-  record.setPassword(
-    password,
-  );
+  record.set("invite_id", credentials.inviteId,);
 
-  record.set(
-    "invite_id",
-    inviteId,
-  );
+  record.set("event", eventId,);
 
-  record.set(
-    "event",
-    eventId,
-  );
-
-  record.set(
-    "name",
-    registrantName,
-  );
+  record.set("name", registrantName,);
 
   if (!isBlank(registrantEmail)) {
     record.set(
@@ -249,10 +205,7 @@ function createNewRegistrant(
     );
   }
 
-  record.set(
-    "is_host",
-    !!isHost,
-  );
+  record.set("is_host", !!isHost,);
 
   try {
     app.save(record);

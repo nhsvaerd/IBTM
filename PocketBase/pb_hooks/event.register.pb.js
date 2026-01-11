@@ -8,29 +8,17 @@ routerAdd(
 
     const requestBody = requestInfo.body ?? {};
 
-    const eventId =requestInfo.pathParams?.eventId;
+    const eventId = requirePathParam(requestInfo, "eventId");
 
-    if (!eventId) {
-      throwApi(400, "Missing eventId",)
-    }
+    const eventRegisterSchema =
+    z.object (
+      {
+        name: schemaFields.registrant.name(),
+        email: schemaFields.registrant.email().optional(),
+      }
+    ).strict()
 
-    const requestSpec = {
-      name: {
-        type: "string",
-        required: true,
-        minLength: 1,
-        maxLength: 200,
-      },
-      email: {
-        type: "email",
-        required: false,
-      },
-    };
-
-    const input = validateRequest(
-      requestBody,
-      requestSpec,
-    );
+    const input = parseOrThrowApi(eventRegisterSchema, requestBody,);
 
     const registrantName = input.name;
 
@@ -151,41 +139,29 @@ routerAdd(
 );
 
 function createNewRegistrant(
-    app,
-    {
-      eventId,
-      registrantName,
-      registrantEmail,
-    },
-  ) 
+  app,
   {
-  const record =
-    new Record(
-      app.findCollectionByNameOrId("registrants",),
-    );
-
-  const password = $security.randomString(24);
-
-  const inviteId = $security.randomString(12);
-
-  const inviteCode = `${inviteId}.${password}`;
-
-  record.setPassword(password,);
-
-  record.set(
-    "invite_id",
-    inviteId,
-  );
-
-  record.set(
-    "event",
     eventId,
+    registrantName,
+    registrantEmail,
+  },
+) 
+{
+  const record = new Record(
+    app.findCollectionByNameOrId("registrants",),
   );
 
-  record.set(
-    "name",
-    registrantName,
-  );
+  const credentials = createInviteCredentials();
+
+  const inviteCode = credentials.inviteCode;
+
+  record.setPassword(credentials.password,);
+
+  record.set("invite_id", inviteId,);
+
+  record.set("event", eventId,);
+
+  record.set("name", registrantName,);
 
   if (!isBlank(registrantEmail)) {
     record.set(

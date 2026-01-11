@@ -7,14 +7,18 @@ PocketBase
     event.invite.pb.js
     event.register.pb.js
     lib
+      dates.pb.js
+      errors.pb.js
       getAppSettingOrDefault.pb.js
-      utilityFunctions.pb.js
-      validateFutureDate.pb.js
-      validateRequest.pb.js
+      isBlank.pb.js
+      pocketZod.pb.js
+      request.pb.js
+      strings.pb.js
     pb_schema.json
     registrant.invite-reissue-by-host.pb.js
     registrant.invite-reissue.pb.js
-    updateValidationHooks
+    schemaFields.pb.js
+    updateValidation
       application_settings.pb.js
       registrants.pb.js
 
@@ -34,33 +38,17 @@ routerAdd(
         const requestBody =
         requestInfo.body ?? {};
 
-        const requestSpec = {
-            ownerName: {
-            type: "string",
-            required: true,
-            minLength: 2,
-            maxLength: 200,
-            },
-            title: {
-            type: "string",
-            required: true,
-            minLength: 1,
-            maxLength: 200,
-            },       
-            startTime: {
-            type: "datetime",
-            required: true,
-            },
-            ownerEmail: {
-            type: "email",
-            required: false,
-            },
-        }
+        const eventCreateSchema =
+        z.object(
+            {
+                ownerName: schemaFields.registrant.name,
+                title: schemaFields.event.title,
+                startTime: schemaFields.event.startTime,
+                ownerEmail: schemaFields.registrant.email.optional(),
+            }
+        ).strict();
 
-        const input = validateRequest(
-                requestBody,
-                requestSpec
-            );
+        const input = parseOrThrowApi(eventCreateSchema, requestBody,);
 
         const ownerName = input.ownerName;
     
@@ -68,7 +56,7 @@ routerAdd(
     
         const startTimeInput = input.startTime;
     
-        const ownerEmail = input.ownerEmail; //Optional: Full email validation
+        const ownerEmail = input.ownerEmail;
 
         // Check valid startTime
         const dayOffset = getAppSettingOrDefault(e.app, "StartDateDayOffset", 1,);
@@ -81,8 +69,6 @@ routerAdd(
         const writeUntil = addDaysLocal(startTime, writeUntilOffset,);
         
         let responseBody;
-
-
 
         e.app.runInTransaction(
             (txApp) => {
@@ -223,64 +209,36 @@ routerAdd(
   "POST",
   "/api/event/:eventId/invite",
   (e) => {
-    const requestInfo =
-      e.requestInfo?.() ?? {};
+    const requestInfo = e.requestInfo?.() ?? {};
 
-    const requestBody =
-      requestInfo.body ?? {};
+    const requestBody = requestInfo.body ?? {};
 
-    const eventId =
-      requestInfo.pathParams?.eventId;
+    const eventId = requirePathParam(requestInfo, "eventId");
 
-    if (!eventId) {
+    const auth = e.auth;
+    if (!auth?.id) {
       throwApi(
-        400,
-        "Missing eventId",
+        401,
+        "Invite creation requires authentication",
       );
-    }
-
-    const requestSpec = {
-      name: {
-        type: "string",
-        required: true,
-        minLength: 1,
-        maxLength: 200,
-      },
-      email: {
-        type: "email",
-        required: false,
-      },
-      isHost: {
-        type: "bool",
-        required: false,
-        default: false,
-      },
     };
 
-    const input =
-    validateRequest(
-        requestBody,
-        requestSpec,
-    );
+    const eventInviteSchema =
+    z.object(
+      {
+        name: schemaFields.registrant.name,
+        email: schemaFields.registrant.email,
+        isHost: schemaFields.registrant.isHost.optional(),
+      }
+    ).strict();
 
-    const registrantName =
-    input.name;
+    const input = parseOrThrowApi(eventInviteSchema, requestBody,);
 
-    const registrantEmail =
-    input.email ?? "";
+    const registrantName = input.name;
 
-    const invitedAsHost =
-    !!input.isHost;
+    const registrantEmail = input.email ?? "";
 
-    // Authentication check
-    const auth = e.auth;
-
-    if (!auth?.id) {
-        throwApi(
-        401,
-        "Host invite requires authentication",
-        );
-    }
+    const invitedAsHost = !!input.isHost;
 
     let responseBody;
 
@@ -505,29 +463,17 @@ routerAdd(
 
     const requestBody = requestInfo.body ?? {};
 
-    const eventId =requestInfo.pathParams?.eventId;
+    const eventId = requirePathParam(requestInfo, "eventId");
 
-    if (!eventId) {
-      throwApi(400, "Missing eventId",)
-    }
+    const eventRegisterSchema =
+    z.object (
+      {
+        name: schemaFields.registrant.name,
+        email: schemaFields.registrant.email.optional(),
+      }
+    )
 
-    const requestSpec = {
-      name: {
-        type: "string",
-        required: true,
-        minLength: 1,
-        maxLength: 200,
-      },
-      email: {
-        type: "email",
-        required: false,
-      },
-    };
-
-    const input = validateRequest(
-      requestBody,
-      requestSpec,
-    );
+    const input = parseOrThrowApi(eventRegisterSchema, requestBody,);
 
     const registrantName = input.name;
 
@@ -709,6 +655,137 @@ function createNewRegistrant(
 }
 ```
 
+### PocketBase\pb_hooks\lib\dates.pb.js
+
+```js
+function startOfLocalDay(date) {
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+    0,
+    0,
+    0,
+    0,
+  );
+};
+
+function addDaysLocal(date, days) {
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate() + days,
+    0,
+    0,
+    0,
+    0,
+  );
+};
+
+function validateFutureDate(
+  dateTimeIso,
+  {
+    dayOffset = 0,
+    fieldName = "dateTime",
+    now = new Date(),
+  } = {},
+) {
+  if (typeof dateTimeIso !== "string" || dateTimeIso.trim() === "") {
+    throwApi(
+      400,
+      `Missing or invalid ${fieldName}`,
+    );
+  }
+
+  if (!Number.isInteger(dayOffset) || dayOffset < 0) {
+    throwApi(
+      400,
+      "dayOffset must be a non-negative integer",
+    );
+  }
+
+  const parsed =
+    new Date(dateTimeIso);
+
+  if (Number.isNaN(parsed.getTime())) {
+    throwApi(
+      400,
+      `${fieldName} must be a valid ISO datetime string`,
+      { fieldName },
+    );
+  }
+
+  // Calendar-day threshold: start of (today + dayOffset)
+  const thresholdDate =
+    addDaysLocal(
+      startOfLocalDay(now),
+      dayOffset,
+    );
+
+  if (parsed.getTime() < thresholdDate.getTime()) {
+    const msg =
+      dayOffset > 0
+        ? `Input date must be ${dayOffset} days from today`
+        : "Input date must be today or later";
+
+    throwApi(
+      400,
+      msg,
+      {
+        fieldName,
+        minIso: thresholdDate.toISOString(),
+      },
+    );
+  }
+
+  // Optional stricter rule for offset 0: must be later than now (not earlier today)
+  if (dayOffset === 0) {
+    if (parsed.getTime() <= now.getTime()) {
+      throwApi(
+        400,
+        "Input time must be in the future",
+        {
+          fieldName,
+          minIso: now.toISOString(),
+        },
+      );
+    }
+  }
+
+  return parsed;
+};
+```
+
+### PocketBase\pb_hooks\lib\errors.pb.js
+
+```js
+function throwApi(status, message, data = {}) {
+  // Try the richer error type if present
+  if (typeof ApiError !== "undefined") {
+    throw new ApiError(
+      status,
+      message,
+      data,
+    );
+  }
+  // Fallback. 400 only: Status in payload.
+  throw new BadRequestError(
+    message,
+    {
+      status,
+      ...data,
+    },
+  );
+};
+
+function throwZodAsApi(err, message = "Invalid input") {
+  if (err instanceof z.ZodError) {
+    throwApi(400, message, { errors: err.issues });
+  }
+  throw err;
+};
+```
+
 ### PocketBase\pb_hooks\lib\getAppSettingOrDefault.pb.js
 
 ```js
@@ -834,7 +911,7 @@ function getAppSettingOrDefault(app, key, fallback) {
 };
 ```
 
-### PocketBase\pb_hooks\lib\utilityFunctions.pb.js
+### PocketBase\pb_hooks\lib\isBlank.pb.js
 
 ```js
 function isBlank(value) {
@@ -853,26 +930,309 @@ function isBlank(value) {
   return false;
 };
 
-function throwApi(status, message, data = {}) {
-  // Try the richer error type if present; fall back to BadRequestError.
-  if (typeof ApiError !== "undefined") {
-    throw new ApiError(
-      status,
-      message,
-      data,
+```
+
+### PocketBase\pb_hooks\lib\pocketZod.pb.js
+
+```js
+class ZodError extends Error {
+  constructor(issues) {
+    super("Validation error");
+    this.name = "ZodError";
+    this.issues = issues;
+  }
+}
+
+function issue(path, message, code = "invalid") {
+  return { path, message, code };
+}
+
+function ok(data) {
+  return { success: true, data };
+}
+
+function fail(issues) {
+  return { success: false, error: new ZodError(issues) };
+}
+
+function makeSchema(parseFn) {
+  const schema = {
+    _parse: parseFn,
+
+    parse(value, path = []) {
+      const r = this.safeParse(value, path);
+      if (!r.success) throw r.error;
+      return r.data;
+    },
+
+    safeParse(value, path = []) {
+      try {
+        return ok(this._parse(value, path));
+      } catch (err) {
+        if (err instanceof ZodError) return fail(err.issues);
+        // If a rule throws a raw Error, wrap it
+        return fail([issue(path, err?.message ?? "Invalid value")]);
+      }
+    },
+
+    optional() {
+      const base = this;
+      return makeSchema((value, path) => {
+        if (value === null || value === undefined) return undefined;
+        return base._parse(value, path);
+      });
+    },
+
+    default(defaultValue) {
+      const base = this;
+      return makeSchema((value, path) => {
+        if (value === null || value === undefined) return defaultValue;
+        if (typeof value === "string" && value.trim() === "") return defaultValue;
+        return base._parse(value, path);
+      });
+    },
+  };
+
+  return schema;
+}
+
+// ---------- primitives ----------
+
+function zString() {
+  let minLen = null;
+  let maxLen = null;
+  let requireNonEmpty = false;
+  let mustBeEmail = false;
+
+  const base = makeSchema((value, path) => {
+    if (value === null || value === undefined) {
+      throw new ZodError([issue(path, "Required", "required")]);
+    }
+
+    const s = String(value).trim();
+
+    if (requireNonEmpty && s.length === 0) {
+      throw new ZodError([issue(path, "Must not be empty", "too_small")]);
+    }
+
+    if (minLen !== null && s.length < minLen) {
+      throw new ZodError([issue(path, `Must be at least ${minLen} characters`, "too_small")]);
+    }
+
+    if (maxLen !== null && s.length > maxLen) {
+      throw new ZodError([issue(path, `Must be at most ${maxLen} characters`, "too_big")]);
+    }
+
+    if (mustBeEmail) {
+      // Basic email check (you can upgrade later)
+      if (!s.includes("@") || s.startsWith("@") || s.endsWith("@")) {
+        throw new ZodError([issue(path, "Invalid email", "invalid_string")]);
+      }
+    }
+
+    return s;
+  });
+
+  base.min = (n) => { minLen = n; return base; };
+  base.max = (n) => { maxLen = n; return base; };
+  base.nonempty = () => { requireNonEmpty = true; return base; };
+  base.email = () => { mustBeEmail = true; return base; };
+
+  return base;
+}
+
+function zInt() {
+  let min = null;
+  let max = null;
+
+  const base = makeSchema((value, path) => {
+    if (value === null || value === undefined) {
+      throw new ZodError([issue(path, "Required", "required")]);
+    }
+
+    const n =
+      typeof value === "number"
+        ? value
+        : Number(String(value).trim());
+
+    if (!Number.isFinite(n) || !Number.isInteger(n)) {
+      throw new ZodError([issue(path, "Must be an integer", "invalid_type")]);
+    }
+
+    if (min !== null && n < min) {
+      throw new ZodError([issue(path, `Must be >= ${min}`, "too_small")]);
+    }
+
+    if (max !== null && n > max) {
+      throw new ZodError([issue(path, `Must be <= ${max}`, "too_big")]);
+    }
+
+    return n;
+  });
+
+  base.min = (n) => { min = n; return base; };
+  base.max = (n) => { max = n; return base; };
+
+  return base;
+}
+
+function zBool() {
+  return makeSchema((value, path) => {
+    if (value === null || value === undefined) {
+      throw new ZodError([issue(path, "Required", "required")]);
+    }
+
+    if (typeof value === "boolean") return value;
+
+    const s = String(value).trim().toLowerCase();
+    if (s === "true" || s === "1" || s === "yes") return true;
+    if (s === "false" || s === "0" || s === "no") return false;
+
+    throw new ZodError([issue(path, "Must be a boolean", "invalid_type")]);
+  });
+}
+
+function zEnum(values) {
+  return makeSchema((value, path) => {
+    if (value === null || value === undefined) {
+      throw new ZodError([issue(path, "Required", "required")]);
+    }
+
+    const s = String(value).trim();
+
+    if (!values.includes(s)) {
+      throw new ZodError([issue(path, "Invalid enum value", "invalid_enum")]);
+    }
+
+    return s;
+  });
+}
+
+function zDateTimeIsoWithTz() {
+  return makeSchema((value, path) => {
+    if (value === null || value === undefined) {
+      throw new ZodError([issue(path, "Required", "required")]);
+    }
+
+    const s = String(value).trim();
+
+    const hasTimezone =
+      /[zZ]$/.test(s) || /[+\-]\d{2}:\d{2}$/.test(s);
+
+    if (!hasTimezone) {
+      throw new ZodError([issue(path, "Datetime must include timezone (Z or ±HH:MM)", "invalid_string")]);
+    }
+
+    const d = new Date(s);
+    if (Number.isNaN(d.getTime())) {
+      throw new ZodError([issue(path, "Invalid datetime", "invalid_string")]);
+    }
+
+    // Return ISO string, since PocketBase date fields want ISO.
+    return d.toISOString();
+  });
+}
+
+// ---------- object ----------
+
+function zObject(shape) {
+  let strict = false;
+
+  const base = makeSchema((value, path) => {
+    if (value === null || value === undefined || typeof value !== "object" || Array.isArray(value)) {
+      throw new ZodError([issue(path, "Must be an object", "invalid_type")]);
+    }
+
+    const out = {};
+    const issues = [];
+
+    // Parse known keys
+    for (const key in shape) {
+      const schema = shape[key];
+      const v = value[key];
+
+      const r = schema.safeParse(v, [...path, key]);
+      if (!r.success) {
+        issues.push(...r.error.issues);
+      } else {
+        // Keep undefined values out to mimic typical request parsing
+        if (r.data !== undefined) out[key] = r.data;
+      }
+    }
+
+    // Strict mode: forbid unknown keys
+    if (strict) {
+      for (const key in value) {
+        if (!Object.prototype.hasOwnProperty.call(shape, key)) {
+          issues.push(issue([...path, key], "Unknown key", "unrecognized_key"));
+        }
+      }
+    }
+
+    if (issues.length > 0) {
+      throw new ZodError(issues);
+    }
+
+    return out;
+  });
+
+  base.strict = () => { strict = true; return base; };
+
+  return base;
+}
+
+// Export-like object (JSVM global)
+const z = {
+  string: zString,
+  int: zInt,
+  bool: zBool,
+  enum: zEnum,
+  datetime: zDateTimeIsoWithTz,
+  object: zObject,
+  ZodError,
+};
+
+```
+
+### PocketBase\pb_hooks\lib\request.pb.js
+
+```js
+function parseOrThrowApi(schema, body) {
+  const result =
+    schema.safeParse(body);
+
+  if (!result.success) {
+    throwApi(
+      400,
+      "Invalid request body",
+      { errors: result.error.issues },
     );
   }
 
-  // BadRequestError is 400 only; include status in payload for debugging.
-  throw new BadRequestError(
-    message,
-    {
-      status,
-      ...data,
-    },
-  );
+  return result.data;
 };
 
+function requirePathParam(requestInfo, name) {
+  
+    const value = requestInfo?.pathParams?.[name];
+
+    if (value === null || value === undefined || String(value).trim() === "") 
+        {
+        throwApi(
+            400, 
+            `Missing ${name}`, 
+            { param: name }
+        );
+        }
+
+    return String(value).trim();
+}
+
+```
+
+### PocketBase\pb_hooks\lib\strings.pb.js
+
+```js
 function requireString(value, field) {
   if (value === null || value === undefined) {
     throwApi(400, `Missing ${field}`, { field });
@@ -885,265 +1245,6 @@ function requireString(value, field) {
 
   return s;
 };
-
-function startOfLocalDay(date) {
-  return new Date(
-    date.getFullYear(),
-    date.getMonth(),
-    date.getDate(),
-    0,
-    0,
-    0,
-    0,
-  );
-}
-
-function addDaysLocal(date, days) {
-  return new Date(
-    date.getFullYear(),
-    date.getMonth(),
-    date.getDate() + days,
-    0,
-    0,
-    0,
-    0,
-  );
-}
-
-```
-
-### PocketBase\pb_hooks\lib\validateFutureDate.pb.js
-
-```js
-function validateFutureDate(
-  dateTimeIso,
-  {
-    dayOffset = 0,
-    fieldName = "dateTime",
-    now = new Date(),
-  } = {},
-) {
-  if (typeof dateTimeIso !== "string" || dateTimeIso.trim() === "") {
-    throwApi(
-      400,
-      `Missing or invalid ${fieldName}`,
-    );
-  }
-
-  if (!Number.isInteger(dayOffset) || dayOffset < 0) {
-    throwApi(
-      400,
-      "dayOffset must be a non-negative integer",
-    );
-  }
-
-  const parsed =
-    new Date(dateTimeIso);
-
-  if (Number.isNaN(parsed.getTime())) {
-    throwApi(
-      400,
-      `${fieldName} must be a valid ISO datetime string`,
-      { fieldName },
-    );
-  }
-
-  // Calendar-day threshold: start of (today + dayOffset)
-  const thresholdDate =
-    addDaysLocal(
-      startOfLocalDay(now),
-      dayOffset,
-    );
-
-  if (parsed.getTime() < thresholdDate.getTime()) {
-    const msg =
-      dayOffset > 0
-        ? `Input date must be ${dayOffset} days from today`
-        : "Input date must be today or later";
-
-    throwApi(
-      400,
-      msg,
-      {
-        fieldName,
-        minIso: thresholdDate.toISOString(),
-      },
-    );
-  }
-
-  // Optional stricter rule for offset 0: must be later than now (not earlier today)
-  if (dayOffset === 0) {
-    if (parsed.getTime() <= now.getTime()) {
-      throwApi(
-        400,
-        "Input time must be in the future",
-        {
-          fieldName,
-          minIso: now.toISOString(),
-        },
-      );
-    }
-  }
-
-  return parsed;
-}
-```
-
-### PocketBase\pb_hooks\lib\validateRequest.pb.js
-
-```js
-function validateRequest(body, spec, opts = {}) {
-  const mode = opts.mode ?? "throw"; // "throw" | "return"
-  const out = {};
-  const errors = [];
-
-  function addError(field, message, meta = {}) {
-    errors.push({ field, message, ...meta });
-  }
-
-  for (const field in spec) {
-    const rule = spec[field] || {};
-    const required = !!rule.required;
-    const type = rule.type || "any";
-
-    const raw = body?.[field];
-
-    const isMissing =
-      raw === null ||
-      raw === undefined ||
-      (typeof raw === "string" && raw.trim().length === 0);
-
-    if (isMissing) {
-      if (required) {
-        addError(field, "Missing required field", { type });
-      } else if ("default" in rule) {
-        out[field] = rule.default;
-      }
-      continue;
-    }
-
-    switch (type) {
-      case "string": {
-        const s = String(raw).trim();
-        if (rule.minLength !== undefined && s.length < rule.minLength) {
-          addError(field, `Must be at least ${rule.minLength} characters`);
-          break;
-        }
-        if (rule.maxLength !== undefined && s.length > rule.maxLength) {
-          addError(field, `Must be at most ${rule.maxLength} characters`);
-          break;
-        }
-        out[field] = s;
-        break;
-      }
-
-      case "email": {
-        const s = String(raw).trim();
-        if (!s.includes("@") || s.startsWith("@") || s.endsWith("@")) {
-          addError(field, "Invalid email format");
-          break;
-        }
-        out[field] = s;
-        break;
-      }
-
-      case "bool": {
-        if (typeof raw === "boolean") {
-          out[field] = raw;
-          break;
-        }
-        const s = String(raw).trim().toLowerCase();
-        if (s === "true" || s === "1" || s === "yes") {
-          out[field] = true;
-          break;
-        }
-        if (s === "false" || s === "0" || s === "no") {
-          out[field] = false;
-          break;
-        }
-        addError(field, "Must be a boolean");
-        break;
-      }
-
-      case "datetime": {
-        const s = String(raw).trim();
-        const hasTimezone =
-          /[zZ]$/.test(s) || /[+\-]\d{2}:\d{2}$/.test(s);
-
-        if (!hasTimezone) {
-          addError(field, "Datetime must include timezone (Z or ±HH:MM)");
-          break;
-        }
-
-        const d = new Date(s);
-        if (Number.isNaN(d.getTime())) {
-          addError(field, "Invalid datetime");
-          break;
-        }
-
-        out[field] = d.toISOString();
-        break;
-      }
-
-      case "int": {
-        const n =
-          typeof raw === "number"
-            ? raw
-            : Number(String(raw).trim());
-
-        if (!Number.isFinite(n) || !Number.isInteger(n)) {
-          addError(field, "Must be an integer");
-          break;
-        }
-
-        if (rule.min !== undefined && n < rule.min) {
-          addError(field, `Must be >= ${rule.min}`);
-          break;
-        }
-        if (rule.max !== undefined && n > rule.max) {
-          addError(field, `Must be <= ${rule.max}`);
-          break;
-        }
-
-        out[field] = n;
-        break;
-      }
-
-      case "enum": {
-        const s = String(raw).trim();
-        const allowed = rule.allowed || [];
-        if (!allowed.includes(s)) {
-          addError(field, "Invalid value", { allowed });
-          break;
-        }
-        out[field] = s;
-        break;
-      }
-
-      default: {
-        out[field] = raw;
-        break;
-      }
-    }
-  }
-
-  if (errors.length > 0) {
-    if (mode === "return") {
-      return { ok: false, data: null, errors };
-    }
-
-    throwApi(
-      400,
-      "Invalid request body",
-      { errors },
-    );
-  }
-
-  return mode === "return"
-    ? { ok: true, data: out, errors: [] }
-    : out;
-}
-
 ```
 
 ### PocketBase\pb_hooks\pb_schema.json
@@ -1365,7 +1466,7 @@ function validateRequest(body, spec, opts = {}) {
             "CREATE UNIQUE INDEX `idx_tokenKey_1xkldq5u5v` ON `registrants` (`tokenKey`)",
             "CREATE UNIQUE INDEX `idx_email_1xkldq5u5v` ON `registrants` (`email`) WHERE `email` != ''",
             "CREATE UNIQUE INDEX `idx_aaHz7Xltda` ON `registrants` (`invite_id`)",
-            "CREATE UNIQUE INDEX `idx_vKt2xsbkhT` ON `registrants` (\n  `registrant_email`,\n  `event`\n) WHERE 'registrant_email' != '' ",
+            "CREATE UNIQUE INDEX `idx_vKt2xsbkhT` ON `registrants` (\n  `registrant_email`,\n  `event`\n) WHERE registrant_email != '' ",
             "CREATE INDEX `idx_WqZCuRRHao` ON `registrants` (`event`)",
             "CREATE INDEX `idx_4FminYCPu8` ON `registrants` (`user`)"
         ],
@@ -1682,15 +1783,14 @@ function validateRequest(body, spec, opts = {}) {
                 "maxSelect": 1,
                 "name": "type",
                 "presentable": false,
-                "required": false,
+                "required": true,
                 "system": false,
                 "type": "select",
                 "values": [
                     "integer",
                     "string",
                     "json",
-                    "boolean",
-                    "enum"
+                    "boolean"
                 ]
             },
             {
@@ -1703,7 +1803,7 @@ function validateRequest(body, spec, opts = {}) {
                 "pattern": "",
                 "presentable": false,
                 "primaryKey": false,
-                "required": false,
+                "required": true,
                 "system": false,
                 "type": "text"
             }
@@ -2099,112 +2199,6 @@ function validateRequest(body, spec, opts = {}) {
         "system": false
     },
     {
-        "id": "pbc_1125843985",
-        "listRule": null,
-        "viewRule": null,
-        "createRule": null,
-        "updateRule": null,
-        "deleteRule": null,
-        "name": "posts",
-        "type": "base",
-        "fields": [
-            {
-                "autogeneratePattern": "[a-z0-9]{15}",
-                "hidden": false,
-                "id": "text3208210256",
-                "max": 15,
-                "min": 15,
-                "name": "id",
-                "pattern": "^[a-z0-9]+$",
-                "presentable": false,
-                "primaryKey": true,
-                "required": true,
-                "system": true,
-                "type": "text"
-            },
-            {
-                "hidden": false,
-                "id": "bool3268062305",
-                "name": "edited",
-                "presentable": false,
-                "required": false,
-                "system": false,
-                "type": "bool"
-            },
-            {
-                "cascadeDelete": false,
-                "collectionId": "pbc_4041782348",
-                "hidden": false,
-                "id": "relation1001261735",
-                "maxSelect": 1,
-                "minSelect": 0,
-                "name": "event",
-                "presentable": false,
-                "required": true,
-                "system": false,
-                "type": "relation"
-            },
-            {
-                "autogeneratePattern": "",
-                "hidden": false,
-                "id": "text3065852031",
-                "max": 2500,
-                "min": 1,
-                "name": "message",
-                "pattern": "",
-                "presentable": false,
-                "primaryKey": false,
-                "required": true,
-                "system": false,
-                "type": "text"
-            },
-            {
-                "cascadeDelete": false,
-                "collectionId": "pbc_42490191812",
-                "hidden": false,
-                "id": "relation1712544448",
-                "maxSelect": 1,
-                "minSelect": 0,
-                "name": "registrant",
-                "presentable": false,
-                "required": false,
-                "system": false,
-                "type": "relation"
-            },
-            {
-                "hidden": false,
-                "id": "bool24025353",
-                "name": "is_flagged",
-                "presentable": false,
-                "required": false,
-                "system": false,
-                "type": "bool"
-            },
-            {
-                "hidden": false,
-                "id": "autodate2990389176",
-                "name": "created",
-                "onCreate": true,
-                "onUpdate": false,
-                "presentable": false,
-                "system": false,
-                "type": "autodate"
-            },
-            {
-                "hidden": false,
-                "id": "autodate3332085495",
-                "name": "updated",
-                "onCreate": true,
-                "onUpdate": true,
-                "presentable": false,
-                "system": false,
-                "type": "autodate"
-            }
-        ],
-        "indexes": [],
-        "system": false
-    },
-    {
         "id": "pbc_1433696524",
         "listRule": null,
         "viewRule": null,
@@ -2316,6 +2310,112 @@ function validateRequest(body, spec, opts = {}) {
             "CREATE INDEX `idx_zPe7w8ky8T` ON `responses` (`event`)"
         ],
         "system": false
+    },
+    {
+        "id": "pbc_1125843985",
+        "listRule": null,
+        "viewRule": null,
+        "createRule": null,
+        "updateRule": null,
+        "deleteRule": null,
+        "name": "posts",
+        "type": "base",
+        "fields": [
+            {
+                "autogeneratePattern": "[a-z0-9]{15}",
+                "hidden": false,
+                "id": "text3208210256",
+                "max": 15,
+                "min": 15,
+                "name": "id",
+                "pattern": "^[a-z0-9]+$",
+                "presentable": false,
+                "primaryKey": true,
+                "required": true,
+                "system": true,
+                "type": "text"
+            },
+            {
+                "hidden": false,
+                "id": "bool3268062305",
+                "name": "edited",
+                "presentable": false,
+                "required": false,
+                "system": false,
+                "type": "bool"
+            },
+            {
+                "cascadeDelete": false,
+                "collectionId": "pbc_4041782348",
+                "hidden": false,
+                "id": "relation1001261735",
+                "maxSelect": 1,
+                "minSelect": 0,
+                "name": "event",
+                "presentable": false,
+                "required": true,
+                "system": false,
+                "type": "relation"
+            },
+            {
+                "autogeneratePattern": "",
+                "hidden": false,
+                "id": "text3065852031",
+                "max": 2500,
+                "min": 1,
+                "name": "message",
+                "pattern": "",
+                "presentable": false,
+                "primaryKey": false,
+                "required": true,
+                "system": false,
+                "type": "text"
+            },
+            {
+                "cascadeDelete": false,
+                "collectionId": "pbc_42490191812",
+                "hidden": false,
+                "id": "relation1712544448",
+                "maxSelect": 1,
+                "minSelect": 0,
+                "name": "registrant",
+                "presentable": false,
+                "required": false,
+                "system": false,
+                "type": "relation"
+            },
+            {
+                "hidden": false,
+                "id": "bool24025353",
+                "name": "is_flagged",
+                "presentable": false,
+                "required": false,
+                "system": false,
+                "type": "bool"
+            },
+            {
+                "hidden": false,
+                "id": "autodate2990389176",
+                "name": "created",
+                "onCreate": true,
+                "onUpdate": false,
+                "presentable": false,
+                "system": false,
+                "type": "autodate"
+            },
+            {
+                "hidden": false,
+                "id": "autodate3332085495",
+                "name": "updated",
+                "onCreate": true,
+                "onUpdate": true,
+                "presentable": false,
+                "system": false,
+                "type": "autodate"
+            }
+        ],
+        "indexes": [],
+        "system": false
     }
 ]
 ```
@@ -2329,36 +2429,20 @@ routerAdd(
   "POST",
   "/api/event/:eventId/invite-reissue-by-host",
   (e) => {
-    const requestInfo =
-      e.requestInfo?.() ?? {};
+    const requestInfo = e.requestInfo?.() ?? {};
 
-    const requestBody =
-      requestInfo.body ?? {};
+    const requestBody = requestInfo.body ?? {};
 
-    const eventId = requestInfo.pathParams?.eventId;
+    const eventId = requirePathParam(requestInfo, "eventId");
 
-    const requestSpec = {
-        registrantId: {
-            type: "string",
-            required: true,
-            minLength: 8,
-            maxLength: 16,
-        },
-    };
-
-    if (!eventId) {
-      throwApi(
-          400,
-          "Missing eventId",
-      );
-    };
-
-    const input = validateRequest(
-        requestBody,
-        requestSpec
+    const inviteReissueByHostSchema =
+    z.object (
+      {
+        registrantId: schemaFields.registrant.id,
+      }
     );
 
-    let responseBody;
+    const input = parseOrThrowApi(inviteReissueByHostSchema, requestBody,);
     
     const transactionResult = 
       e.app.runInTransaction(
@@ -2403,16 +2487,16 @@ routerAdd(
             );
         }
 
-        // Registrant check
+        // Registrant event check
         const record = 
           txApp.findRecordById("registrants", input.registrantId,);
         
-          if (!record.get("event") === eventId) {
-            throwApi(
-              403, 
-              "Provided registrant is not registered for this event"
-            )
-          }
+        if (String(record.get("event")) !== String(eventId)) {
+          throwApi(
+            403, 
+            "Provided registrant is not registered for this event",
+          );
+        }
 
         // IsHost Check
         if (!requestingAgent.getBool("is_host")) {
@@ -2437,7 +2521,7 @@ routerAdd(
       }
     );
 
-    return e.json (200, transactionResult); //Replace with sending email before release
+    return e.json (200, transactionResult); //Replace with sending email
   },
 );
 
@@ -2452,12 +2536,20 @@ routerAdd(
   "POST",
   "/api/event/:eventId/invite-reissue",
   (e) => {
-    const requestInfo =
-      e.requestInfo?.() ?? {};
+    const allowEndpoint = getAppSettingOrDefault(e.app, "AllowUnauthenticatedReissue", false,);
+
+    if (allowEndpoint = false) {
+        throwApi(
+            403,
+            "New invite code must be aquired from event host"
+        )
+    };
+
+    const requestInfo = e.requestInfo?.() ?? {};
 
     const requestBody = requestInfo.body ?? {};
 
-    const eventId = requestInfo.pathParams?.eventId;
+    const eventId = requirePathParam(requestInfo, "eventId");
 
     const requestSpec = {
         name: {
@@ -2472,31 +2564,18 @@ routerAdd(
         },
     };
 
-    const allowEndpoint = getAppSettingOrDefault(e.app, "AllowUnauthenticatedReissue", false,);
-
-    if (!allowEndpoint) {
-        throwApi(
-            403,
-            "New invite code must be aquired through an event host"
-        )
-    };
-
-    if (!eventId) {  // Option: Replace with general path parameter validator 
-      throwApi(
-        400,
-        "Missing eventId",
-      );
-    };
-
-    const input = validateRequest(
-        requestBody,
-        requestSpec
+    const inviteReissueSchema =
+    z.object (
+        {
+            name: schemaFields.registrant.name,
+            email: schemaFields.registrant.email,
+        }
     );
+
+    const input = parseOrThrowApi(inviteReissueSchema, requestBody,);
 
     const registrantName = input.name;
     const registrantEmail = input.email;
-
-    let responseBody;
     
     const transactionResult = e.app.runInTransaction(
         (txApp) => {
@@ -2555,9 +2634,11 @@ routerAdd(
                 )
             };
 
+            const inviteId = record.getString("invite_id");
+
             const password = $security.randomString(24);
 
-            const newInviteCode = `${record.inviteId}.${password}`;
+            const newInviteCode = `${inviteId}.${password}`;
 
             record.setPassword(password);
 
@@ -2573,38 +2654,180 @@ routerAdd(
 );
 ```
 
-### PocketBase\pb_hooks\updateValidationHooks\application_settings.pb.js
+### PocketBase\pb_hooks\schemaFields.pb.js
 
 ```js
-// <reference path="..\pb_data\types.d.ts" />
+const schemaFields = {
+    registrant: {
+        id: () => z.string().min(8).max(64),
+        name: () => z.string().min(1).max(200),
+        email: () => z.string().email().max(254),
+        isHost: () => z.bool(),
+    },
+    event: {
+        id: () => z.string().min(8).max(64),
+        title: () => z.string().min(1).max(200),
+        startTime: () => z.datetime(),
+    },
+}
+```
+
+### PocketBase\pb_hooks\updateValidation\application_settings.pb.js
+
+```js
+// <reference path="../pb_data/types.d.ts" />
 
 onRecordUpdateRequest(
-    (e) => {
-        if (e.collection?.name !== "application_settings") return e.next();
-
-        const requestInfo = e.requestInfo?.() ?? {};
-
-        const requestBody = requestInfo.body ?? {};
-
-        // Type enforcement: Pre-check value data type aginst selected type
-
-        // Helper function: enforceIntRange(key, minValue, maxValue)
-
-        // Key: InviteCodeIdLength Range: 8 to 16
-
-        // Key InviteCodeTokenLength Range: 8 to 64 - Warning if less than 22: "Set token length does not provide reasonable brute force protection"
-
-        // Key: EventIdLength Range: 8 to 16
-
-        // Key: WriteUntilDayOffset Range: 0 to 30000
-
-        // Key: StartDateDayOffset Range: 0 to 365
+  (e) => {
+    if (e.collection?.name !== "application_settings") {
+      return e.next();
     }
-)
+
+    const body = e.requestInfo?.()?.body ?? {};
+
+    const record = e.record;
+
+    const key =
+      String(
+        body.key ?? record.getString("key"),
+      ).trim();
+
+    const type =
+      String(
+        body.type ?? record.getString("type"),
+      ).trim();
+
+    const rawValue = body.value ?? record.getString("value");
+
+    const parsedValue = parseSettingByType(type, rawValue,);
+
+    parseSettingByKey(key, parsedValue,);
+
+    return e.next();
+  },
+  "application_settings",
+);
+
+const valueConstraints = {
+  StartDateDayOffset:
+    z.int().min(0).max(365),
+
+  WriteUntilDayOffset:
+    z.int().min(0).max(30000),
+
+  AllowUnauthenticatedReissue:
+    z.bool(),
+
+  InviteCodeIdLength:
+    z.int().min(8).max(16),
+
+  InviteCodePasswordLength:
+    z.int().min(8).max(64),
+};
+
+function parseSettingByType(
+  type,
+  raw,
+) {
+  try {
+    switch (type) {
+      case "integer":
+        return z.int().parse(raw, ["value"]);
+
+      case "string":
+        // choose whether empty is allowed
+        return z.string().optional().parse(raw, ["value"]) ?? "";
+
+      case "boolean":
+        return z.bool().parse(raw, ["value"]);
+
+      case "json": {
+        const s =
+          z.string().nonempty().parse(raw, ["value"]);
+
+        try {
+          return JSON.parse(s);
+        } catch (_) {
+          throw new z.ZodError([
+            {
+              path: ["value"],
+              message: "Invalid JSON",
+              code: "invalid_string",
+            },
+          ]);
+        }
+      }
+
+      default:
+        throw new z.ZodError([
+          {
+            path: ["type"],
+            message: "Unknown type",
+            code: "invalid_enum",
+          },
+        ]);
+    }
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      // Convert to your API error format
+      throwApi(
+        400,
+        "Invalid application setting value",
+        {
+          key: undefined, // caller may not have one yet
+          errors: err.issues,
+        },
+      );
+    }
+    throw err;
+  }
+}
+
+function parseSettingByKey(
+  key,
+  parsedValue,
+) 
+{
+  const rule =
+    valueConstraints[key];
+
+  // Unknown keys: allow
+  if (!rule) return;
+
+  const result =
+    rule.safeParse(
+      parsedValue,
+      ["value"],
+    );
+
+  if (!result.success) {
+    throwApi(
+      400,
+      "Application setting violates constraints",
+      {
+        key,
+        errors: result.error.issues,
+      },
+    );
+  }
+
+  // Optional “warning” example (non-blocking):
+  if (
+    key === "InviteCodePasswordLength" &&
+    typeof parsedValue === "number" &&
+    parsedValue < 22
+  ) {
+    try {
+      console.warn(
+        `[application_settings] ${key} is ${parsedValue}; recommended minimum is 22`,
+      );
+    } catch (_) {}
+  }
+}
 
 ```
 
-### PocketBase\pb_hooks\updateValidationHooks\registrants.pb.js
+### PocketBase\pb_hooks\updateValidation\registrants.pb.js
 
 ```js
 // <reference path="..\pb_data\types.d.ts" />

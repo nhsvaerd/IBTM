@@ -9,33 +9,17 @@ routerAdd(
         const requestBody =
         requestInfo.body ?? {};
 
-        const requestSpec = {
-            ownerName: {
-            type: "string",
-            required: true,
-            minLength: 2,
-            maxLength: 200,
-            },
-            title: {
-            type: "string",
-            required: true,
-            minLength: 1,
-            maxLength: 200,
-            },       
-            startTime: {
-            type: "datetime",
-            required: true,
-            },
-            ownerEmail: {
-            type: "email",
-            required: false,
-            },
-        }
+        const eventCreateSchema =
+        z.object(
+            {
+                ownerName: schemaFields.registrant.name(),
+                title: schemaFields.event.title(),
+                startTime: schemaFields.event.startTime(),
+                ownerEmail: schemaFields.registrant.email().optional(),
+            }
+        ).strict();
 
-        const input = validateRequest(
-                requestBody,
-                requestSpec
-            );
+        const input = parseOrThrowApi(eventCreateSchema, requestBody,);
 
         const ownerName = input.ownerName;
     
@@ -43,7 +27,7 @@ routerAdd(
     
         const startTimeInput = input.startTime;
     
-        const ownerEmail = input.ownerEmail; //Optional: Full email validation
+        const ownerEmail = input.ownerEmail;
 
         // Check valid startTime
         const dayOffset = getAppSettingOrDefault(e.app, "StartDateDayOffset", 1,);
@@ -56,8 +40,6 @@ routerAdd(
         const writeUntil = addDaysLocal(startTime, writeUntilOffset,);
         
         let responseBody;
-
-
 
         e.app.runInTransaction(
             (txApp) => {
@@ -115,15 +97,19 @@ function createNewHost(
             ),
         );
 
-    const password = $security.randomString(24);
+/*    const password = $security.randomString(24);
 
     const inviteId = $security.randomString(12);
 
-    const inviteCode = `${inviteId}.${password}`;
+    const inviteCode = `${inviteId}.${password}`;*/
 
-    record.setPassword(password,);
+    const credentials = createInviteCredentials();
 
-    record.set("invite_id", inviteId,);
+    const inviteCode = credentials.inviteCode;
+
+    record.setPassword(credentials.password,);
+
+    record.set("invite_id", credentials.inviteId,);
 
     record.set("event", eventId,);
 
